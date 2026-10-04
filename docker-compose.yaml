@@ -1,0 +1,63 @@
+services:
+  # Object storage — our local "S3"
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.8
+    container_name: rustfs
+    ports:
+      - "9000:9000"   # S3 API — what programs talk to
+      - "9001:9001"   # web console — what you look at
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://127.0.0.1:9000/health"]
+      interval: 5s
+      retries: 20
+      start_period: 10s
+
+  # One-shot job: create the bucket, then exit
+  create-bucket:
+    image: amazon/aws-cli:2.36.40
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://rustfs:9000   # container name, not localhost
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["aws s3 mb s3://warehouse || echo 'bucket already exists'"]
+
+  # The catalog — table name -> latest metadata file
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture:1.10.1
+    container_name: iceberg-rest
+    depends_on:
+      create-bucket:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"
+    environment:
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://warehouse/                  # where new tables go
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://rustfs:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      CATALOG_URI: jdbc:sqlite:/tmp/iceberg_catalog.db    # the pointers live in this tiny DB
+
+  # SQL engine
+  trino:
+    image: trinodb/trino:483
+    container_name: trino
+    depends_on: [iceberg-rest]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties

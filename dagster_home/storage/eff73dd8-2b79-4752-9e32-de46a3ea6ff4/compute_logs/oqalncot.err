@@ -1,0 +1,7 @@
+[32m2026-10-01 19:44:41 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - LOGS_CAPTURED - Capturing logs for process (pid: 95902).
+[32m2026-10-01 19:44:41 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - gold__flight_phases - STEP_START - Started execution of step "gold__flight_phases".
+[32m2026-10-01 19:44:42 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - gold__flight_phases - STEP_OUTPUT - Yielded output "result" of type "Nothing". (Type check passed).
+[32m2026-10-01 19:44:42 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - gold__flight_phases - ASSET_MATERIALIZATION - Materialized value gold flight_phases.
+[32m2026-10-01 19:44:42 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - gold__flight_phases - STEP_OUTPUT - Yielded output "gold__flight_phases_phases_cover_recording" of type "Any". (Type check passed).
+[32m2026-10-01 19:44:42 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - gold__flight_phases - ASSET_CHECK_EVALUATION - Asset check 'phases_cover_recording' on 'gold/flight_phases' passed.
+[32m2026-10-01 19:44:42 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95902 - gold__flight_phases - STEP_SUCCESS - Finished execution of step "gold__flight_phases" in 745ms.

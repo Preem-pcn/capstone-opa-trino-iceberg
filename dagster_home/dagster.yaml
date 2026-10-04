@@ -1,0 +1,8 @@
+# Dagster's own settings for this project (runs, schedules, partitions live in this folder).
+
+# One run at a time. Two runs at once would race to commit to the same
+# Iceberg tables (optimistic concurrency) and one would fail. Extra runs
+# wait in the queue instead.
+concurrency:
+  runs:
+    max_concurrent_runs: 1
