@@ -1,4 +1,7 @@
 #1
+docker compose up -d       
+docker exec -it trino trino
+
 SHOW CATALOGS;
 CREATE SCHEMA iceberg.sandbox;
 CREATE TABLE iceberg.sandbox.hello (id INTEGER, msg VARCHAR);
@@ -38,18 +41,61 @@ CREATE TABLE iceberg.silver.flights (
 COMMENT 'One row per flight, built from report.json';
 
 
+SHOW TABLES FROM iceberg.silver;
+
+
 #3
-python load_silver.py ~/Documents/capstone-qar/qar-data/decoded/A350_HS-THJ_20220322_TG0341_VTBS-OPKC
+-- python load_silver.py ~/Documents/capstone-qar/qar-data/decoded/A350_HS-THJ_20220322_TG0341_VTBS-OPKC
+python load_silver.py decoded/A350_HS-THJ_20220322_TG0341_VTBS-OPKC
+
 
 SHOW TABLES FROM iceberg.silver;
 
 SELECT flight_id, tail, flight_no, origin, destination, dec_takeoff_s, dec_touchdown_s
 FROM iceberg.silver.flights;
 
-SHOW COLUMNS FROM iceberg.silver.rate_8hz LIKE 'vrtg';
+SELECT flight_id, count(*) AS rows
+FROM iceberg.silver.rate_1hz
+GROUP BY flight_id
+ORDER BY flight_id;
 
-SELECT f.flight_id, max(r.vrtg) AS peak_g
-FROM iceberg.silver.rate_8hz r
-JOIN iceberg.silver.flights f ON r.flight_id = f.flight_id
-WHERE r.t_offset_s BETWEEN f.dec_touchdown_s - 5 AND f.dec_touchdown_s + 10
-GROUP BY f.flight_id;
+--load all flight
+python load_silver.py decoded/A350_*
+
+SELECT flight_id, count(*) AS rows
+FROM iceberg.silver.rate_1hz
+GROUP BY flight_id;
+
+SELECT committed_at, operation,
+       element_at(summary, 'added-records')   AS added,
+       element_at(summary, 'deleted-records') AS deleted
+FROM iceberg.silver."rate_1hz$snapshots"
+ORDER BY committed_at;
+
+
+# 4
+docker cp sql/04_gold.sql trino:/tmp/04_gold.sql
+docker exec trino trino --file /tmp/04_gold.sql
+
+SHOW TABLES FROM iceberg.gold;
+
+SELECT flight_id, event, t_offset_s, value, unit
+FROM iceberg.gold.flight_events ORDER BY flight_id, t_offset_s;
+
+SELECT flight_id, phase, start_s, end_s, round(duration_s / 60.0, 1) AS minutes
+FROM iceberg.gold.flight_phases ORDER BY flight_id, phase_order;
+
+SELECT flight_id, airborne_min, cruise_min, max_alt_ft, touchdown_peak_g,
+       hard_landing, liftoff_delta_s, touchdown_delta_s
+FROM iceberg.gold.flight_summary ORDER BY flight_id;
+
+
+docker cp sql/04_gold_checks.sql trino:/tmp/04_gold_checks.sql
+docker exec trino trino --file /tmp/04_gold_checks.sql --output-format ALIGNED
+
+# 5
+export DAGSTER_HOME=$PWD/dagster_home
+dagster dev -f qar_pipeline.py
+
+SELECT flight_id, airborne_min, touchdown_peak_g, liftoff_delta_s, touchdown_delta_s
+FROM iceberg.gold.flight_summary ORDER BY flight_id;

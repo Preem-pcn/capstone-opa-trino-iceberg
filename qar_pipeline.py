@@ -22,7 +22,7 @@ import trino
 
 import load_silver as L
 
-DECODED = Path(os.environ.get("QAR_DECODED", "~/Documents/capstone-qar/qar-data/decoded")).expanduser()
+DECODED = Path(os.environ.get("QAR_DECODED", "./decoded")).expanduser()
 RECORDING_GLOB = os.environ.get("QAR_RECORDING_GLOB", "A350_*")   # A350 only, for now
 SQL_DIR = Path(__file__).parent / "sql"
 

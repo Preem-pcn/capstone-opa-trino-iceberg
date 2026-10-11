@@ -1,0 +1,5 @@
+# Local state for the optional publication experiment.
+publication_dagster_home/
+__pycache__/gold_publication.*.pyc
+__pycache__/publication_pipeline.*.pyc
+__pycache__/publication_experiment.*.pyc
