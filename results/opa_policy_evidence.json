@@ -1,0 +1,451 @@
+{
+  "generated_at": "2026-10-11T19:47:37.011272+00:00",
+  "scope": "Authorization PoC: self-asserted users; direct Iceberg/RustFS access bypasses Trino",
+  "fixtures": {
+    "schemas": [
+      "opa_demo_silver",
+      "opa_demo_gold"
+    ],
+    "flights": 3,
+    "engineering_visible": 1,
+    "operations_visible": 2
+  },
+  "checks": [
+    {
+      "name": "discovery:approved_schemas_only",
+      "passed": true
+    },
+    {
+      "name": "discovery:unlisted_table_hidden",
+      "passed": true
+    },
+    {
+      "name": "discovery:denied_column_hidden",
+      "passed": true
+    },
+    {
+      "name": "discovery:information_schema_filtered",
+      "passed": true
+    },
+    {
+      "name": "rows:admin:iceberg.opa_demo_silver.flights",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:safety_analyst:iceberg.opa_demo_silver.flights",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:engineering_analyst:iceberg.opa_demo_silver.flights",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "rows:operations_analyst:iceberg.opa_demo_silver.flights",
+      "passed": true,
+      "expected_rows": 2,
+      "actual_rows": 2
+    },
+    {
+      "name": "rows:admin:iceberg.opa_demo_silver.rate_1hz",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:safety_analyst:iceberg.opa_demo_silver.rate_1hz",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:engineering_analyst:iceberg.opa_demo_silver.rate_1hz",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "rows:operations_analyst:iceberg.opa_demo_silver.rate_1hz",
+      "passed": true,
+      "expected_rows": 2,
+      "actual_rows": 2
+    },
+    {
+      "name": "rows:admin:iceberg.opa_demo_gold.flight_summary",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:safety_analyst:iceberg.opa_demo_gold.flight_summary",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:engineering_analyst:iceberg.opa_demo_gold.flight_summary",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "rows:operations_analyst:iceberg.opa_demo_gold.flight_summary",
+      "passed": true,
+      "expected_rows": 2,
+      "actual_rows": 2
+    },
+    {
+      "name": "rows:admin:iceberg.opa_demo_gold.flight_events",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:safety_analyst:iceberg.opa_demo_gold.flight_events",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:engineering_analyst:iceberg.opa_demo_gold.flight_events",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "rows:operations_analyst:iceberg.opa_demo_gold.flight_events",
+      "passed": true,
+      "expected_rows": 2,
+      "actual_rows": 2
+    },
+    {
+      "name": "rows:admin:iceberg.opa_demo_gold.flight_phases",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:safety_analyst:iceberg.opa_demo_gold.flight_phases",
+      "passed": true,
+      "expected_rows": 3,
+      "actual_rows": 3
+    },
+    {
+      "name": "rows:engineering_analyst:iceberg.opa_demo_gold.flight_phases",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "rows:operations_analyst:iceberg.opa_demo_gold.flight_phases",
+      "passed": true,
+      "expected_rows": 2,
+      "actual_rows": 2
+    },
+    {
+      "name": "mask:operations_analyst:iceberg.opa_demo_silver.flights",
+      "passed": true
+    },
+    {
+      "name": "mask:operations_analyst:iceberg.opa_demo_gold.flight_summary",
+      "passed": true
+    },
+    {
+      "name": "mask:engineering_analyst:iceberg.opa_demo_silver.flights",
+      "passed": true
+    },
+    {
+      "name": "mask:engineering_analyst:iceberg.opa_demo_gold.flight_summary",
+      "passed": true
+    },
+    {
+      "name": "mask:safety:source_locations",
+      "passed": true
+    },
+    {
+      "name": "pseudonym:stable_across_layers",
+      "passed": true
+    },
+    {
+      "name": "deny:blocked_user",
+      "passed": true,
+      "message": "Query 20261011_194758_00293_kdd56 failed: Access Denied: Cannot execute query"
+    },
+    {
+      "name": "deny:unknown_user",
+      "passed": true,
+      "message": "Query 20261011_194759_00294_kdd56 failed: Access Denied: Cannot execute query"
+    },
+    {
+      "name": "deny:safety_analyst:unlisted_table",
+      "passed": true,
+      "message": "Query 20261011_194759_00295_kdd56 failed: Access Denied: Cannot select from columns [flight_id] in table or view iceberg.opa_demo_silver.unlisted_demo"
+    },
+    {
+      "name": "deny:safety_analyst:metadata_files",
+      "passed": true,
+      "message": "Query 20261011_194759_00296_kdd56 failed: Access Denied: Cannot select from columns [file_path] in table or view iceberg.opa_demo_silver.flights$files"
+    },
+    {
+      "name": "deny:safety_analyst:metadata_snapshots",
+      "passed": true,
+      "message": "Query 20261011_194800_00297_kdd56 failed: Access Denied: Cannot select from columns [snapshot_id] in table or view iceberg.opa_demo_silver.flights$snapshots"
+    },
+    {
+      "name": "deny:safety_analyst:hidden_file_path",
+      "passed": true,
+      "message": "Query 20261011_194800_00298_kdd56 failed: Access Denied: Cannot select from columns [$path] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:safety_analyst:hidden_partition",
+      "passed": true,
+      "message": "Query 20261011_194801_00299_kdd56 failed: Access Denied: Cannot select from columns [$partition] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:safety_analyst:hidden_file_time",
+      "passed": true,
+      "message": "Query 20261011_194801_00300_kdd56 failed: Access Denied: Cannot select from columns [$file_modified_time] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:safety_analyst:restricted_information_schema",
+      "passed": true,
+      "message": "Query 20261011_194802_00301_kdd56 failed: Access Denied: Cannot select from columns [grantee] in table or view iceberg.information_schema.table_privileges"
+    },
+    {
+      "name": "deny:safety_analyst:insert",
+      "passed": true,
+      "message": "Query 20261011_194802_00302_kdd56 failed: Access Denied: Cannot insert into table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:safety_analyst:delete",
+      "passed": true,
+      "message": "Query 20261011_194803_00303_kdd56 failed: Access Denied: Cannot delete from table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:safety_analyst:update",
+      "passed": true,
+      "message": "Query 20261011_194803_00304_kdd56 failed: Access Denied: Cannot update columns [tail] in table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations_analyst:unlisted_table",
+      "passed": true,
+      "message": "Query 20261011_194803_00305_kdd56 failed: Access Denied: Cannot select from columns [flight_id] in table or view iceberg.opa_demo_silver.unlisted_demo"
+    },
+    {
+      "name": "deny:operations_analyst:metadata_files",
+      "passed": true,
+      "message": "Query 20261011_194804_00306_kdd56 failed: Access Denied: Cannot select from columns [file_path] in table or view iceberg.opa_demo_silver.flights$files"
+    },
+    {
+      "name": "deny:operations_analyst:metadata_snapshots",
+      "passed": true,
+      "message": "Query 20261011_194804_00307_kdd56 failed: Access Denied: Cannot select from columns [snapshot_id] in table or view iceberg.opa_demo_silver.flights$snapshots"
+    },
+    {
+      "name": "deny:operations_analyst:hidden_file_path",
+      "passed": true,
+      "message": "Query 20261011_194805_00308_kdd56 failed: Access Denied: Cannot select from columns [$path, flight_id] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations_analyst:hidden_partition",
+      "passed": true,
+      "message": "Query 20261011_194805_00309_kdd56 failed: Access Denied: Cannot select from columns [$partition, flight_id] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations_analyst:hidden_file_time",
+      "passed": true,
+      "message": "Query 20261011_194806_00310_kdd56 failed: Access Denied: Cannot select from columns [flight_id, $file_modified_time] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations_analyst:restricted_information_schema",
+      "passed": true,
+      "message": "Query 20261011_194806_00311_kdd56 failed: Access Denied: Cannot select from columns [grantee] in table or view iceberg.information_schema.table_privileges"
+    },
+    {
+      "name": "deny:operations_analyst:insert",
+      "passed": true,
+      "message": "Query 20261011_194807_00312_kdd56 failed: Access Denied: Cannot insert into table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations_analyst:delete",
+      "passed": true,
+      "message": "Query 20261011_194807_00313_kdd56 failed: Access Denied: Cannot delete from table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations_analyst:update",
+      "passed": true,
+      "message": "Query 20261011_194807_00314_kdd56 failed: Access Denied: Cannot update columns [tail] in table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:engineering_analyst:unlisted_table",
+      "passed": true,
+      "message": "Query 20261011_194808_00315_kdd56 failed: Access Denied: Cannot select from columns [flight_id] in table or view iceberg.opa_demo_silver.unlisted_demo"
+    },
+    {
+      "name": "deny:engineering_analyst:metadata_files",
+      "passed": true,
+      "message": "Query 20261011_194808_00316_kdd56 failed: Access Denied: Cannot select from columns [file_path] in table or view iceberg.opa_demo_silver.flights$files"
+    },
+    {
+      "name": "deny:engineering_analyst:metadata_snapshots",
+      "passed": true,
+      "message": "Query 20261011_194809_00317_kdd56 failed: Access Denied: Cannot select from columns [snapshot_id] in table or view iceberg.opa_demo_silver.flights$snapshots"
+    },
+    {
+      "name": "deny:engineering_analyst:hidden_file_path",
+      "passed": true,
+      "message": "Query 20261011_194809_00318_kdd56 failed: Access Denied: Cannot select from columns [$path] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:engineering_analyst:hidden_partition",
+      "passed": true,
+      "message": "Query 20261011_194810_00319_kdd56 failed: Access Denied: Cannot select from columns [$partition] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:engineering_analyst:hidden_file_time",
+      "passed": true,
+      "message": "Query 20261011_194810_00320_kdd56 failed: Access Denied: Cannot select from columns [$file_modified_time] in table or view iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:engineering_analyst:restricted_information_schema",
+      "passed": true,
+      "message": "Query 20261011_194810_00321_kdd56 failed: Access Denied: Cannot select from columns [grantee] in table or view iceberg.information_schema.table_privileges"
+    },
+    {
+      "name": "deny:engineering_analyst:insert",
+      "passed": true,
+      "message": "Query 20261011_194811_00322_kdd56 failed: Access Denied: Cannot insert into table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:engineering_analyst:delete",
+      "passed": true,
+      "message": "Query 20261011_194811_00323_kdd56 failed: Access Denied: Cannot delete from table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:engineering_analyst:update",
+      "passed": true,
+      "message": "Query 20261011_194812_00324_kdd56 failed: Access Denied: Cannot update columns [tail] in table iceberg.opa_demo_silver.flights"
+    },
+    {
+      "name": "deny:operations:safety_column",
+      "passed": true,
+      "message": "Query 20261011_194812_00325_kdd56 failed: Access Denied: Cannot select from columns [touchdown_peak_g, flight_id] in table or view iceberg.opa_demo_gold.flight_summary"
+    },
+    {
+      "name": "deny:operations:star_includes_safety_column",
+      "passed": true,
+      "message": "Query 20261011_194813_00326_kdd56 failed: Access Denied: Cannot select from columns [flight_no, tail, origin, destination, touchdown_peak_g, flight_id] in table or view iceberg.opa_demo_gold.flight_summary"
+    },
+    {
+      "name": "allow:safety:safety_column",
+      "passed": true
+    },
+    {
+      "name": "rows:engineering_analyst:time_travel",
+      "passed": true
+    },
+    {
+      "name": "rows:operations_analyst:time_travel",
+      "passed": true
+    },
+    {
+      "name": "allow:dagster:write",
+      "passed": true
+    },
+    {
+      "name": "allow:publication_lab:write",
+      "passed": true
+    },
+    {
+      "name": "real:engineering_analyst:silver.flights",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "real:operations_analyst:silver.flights",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "real:operations:mask:silver.flights",
+      "passed": true
+    },
+    {
+      "name": "real:wide_table:column_discovery",
+      "passed": true,
+      "column_count": 1368
+    },
+    {
+      "name": "real:engineering_analyst:silver.rate_1hz",
+      "passed": true,
+      "expected_rows": 22020,
+      "actual_rows": 22020
+    },
+    {
+      "name": "real:operations_analyst:silver.rate_1hz",
+      "passed": true,
+      "expected_rows": 22020,
+      "actual_rows": 22020
+    },
+    {
+      "name": "real:engineering_analyst:gold.flight_summary",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "real:operations_analyst:gold.flight_summary",
+      "passed": true,
+      "expected_rows": 1,
+      "actual_rows": 1
+    },
+    {
+      "name": "real:operations:mask:gold.flight_summary",
+      "passed": true
+    },
+    {
+      "name": "real:engineering_analyst:gold.flight_events",
+      "passed": true,
+      "expected_rows": 4,
+      "actual_rows": 4
+    },
+    {
+      "name": "real:operations_analyst:gold.flight_events",
+      "passed": true,
+      "expected_rows": 4,
+      "actual_rows": 4
+    },
+    {
+      "name": "real:engineering_analyst:gold.flight_phases",
+      "passed": true,
+      "expected_rows": 5,
+      "actual_rows": 5
+    },
+    {
+      "name": "real:operations_analyst:gold.flight_phases",
+      "passed": true,
+      "expected_rows": 5,
+      "actual_rows": 5
+    },
+    {
+      "name": "deny:real:publication_history",
+      "passed": true,
+      "message": "Query 20261011_194840_00369_kdd56 failed: Access Denied: Cannot select from columns [flight_id] in table or view iceberg.gold_publication.flight_summary_history"
+    }
+  ],
+  "real_tables_checked": [
+    "silver.flights",
+    "silver.rate_1hz",
+    "gold.flight_summary",
+    "gold.flight_events",
+    "gold.flight_phases"
+  ],
+  "passed": true
+}

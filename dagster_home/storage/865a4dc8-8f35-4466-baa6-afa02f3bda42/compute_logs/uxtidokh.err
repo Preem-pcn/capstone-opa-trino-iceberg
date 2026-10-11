@@ -1,5 +1,0 @@
-[32m2026-10-05 01:52:14 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - 865a4dc8-8f35-4466-baa6-afa02f3bda42 - 35077 - LOGS_CAPTURED - Capturing logs for process (pid: 35077).
-[32m2026-10-05 01:52:14 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - 865a4dc8-8f35-4466-baa6-afa02f3bda42 - 35077 - silver__flight_data - STEP_START - Started execution of step "silver__flight_data".
-[32m2026-10-05 01:52:18 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - 865a4dc8-8f35-4466-baa6-afa02f3bda42 - 35077 - silver__flight_data - STEP_OUTPUT - Yielded output "result" of type "Any". (Type check passed).
-[32m2026-10-05 01:52:19 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - 865a4dc8-8f35-4466-baa6-afa02f3bda42 - 35077 - silver__flight_data - ASSET_MATERIALIZATION - Materialized value silver flight_data.
-[32m2026-10-05 01:52:19 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - 865a4dc8-8f35-4466-baa6-afa02f3bda42 - 35077 - silver__flight_data - STEP_SUCCESS - Finished execution of step "silver__flight_data" in 4.09s.

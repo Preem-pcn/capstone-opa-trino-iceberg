@@ -52,12 +52,28 @@ services:
       CATALOG_S3_PATH__STYLE__ACCESS: "true"
       CATALOG_URI: jdbc:sqlite:/tmp/iceberg_catalog.db    # the pointers live in this tiny DB
 
+  # Authorization policy decision point for Trino.
+  # This is a PoC: usernames are supplied by the client and are not authenticated.
+  opa:
+    image: openpolicyagent/opa:1.0.1-static
+    container_name: opa
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "--log-level=error", "/policies/trino.rego"]
+    volumes:
+      - ./opa:/policies:ro
+    ports:
+      - "8282:8181"
+
   # SQL engine
   trino:
     image: trinodb/trino:483
     container_name: trino
-    depends_on: [iceberg-rest]
+    depends_on:
+      iceberg-rest:
+        condition: service_started
+      opa:
+        condition: service_started
     ports:
       - "8080:8080"
     volumes:
-      - ./trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties
+      - ./trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+      - ./trino/access-control.properties:/etc/trino/access-control.properties:ro

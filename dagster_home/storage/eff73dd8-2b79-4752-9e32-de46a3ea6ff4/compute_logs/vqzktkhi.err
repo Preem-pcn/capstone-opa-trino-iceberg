@@ -1,7 +1,0 @@
-[32m2026-10-01 19:44:38 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - LOGS_CAPTURED - Capturing logs for process (pid: 95890).
-[32m2026-10-01 19:44:38 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - gold__flight_events - STEP_START - Started execution of step "gold__flight_events".
-[32m2026-10-01 19:44:40 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - gold__flight_events - STEP_OUTPUT - Yielded output "result" of type "Nothing". (Type check passed).
-[32m2026-10-01 19:44:40 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - gold__flight_events - ASSET_MATERIALIZATION - Materialized value gold flight_events.
-[32m2026-10-01 19:44:40 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - gold__flight_events - STEP_OUTPUT - Yielded output "gold__flight_events_events_in_order" of type "Any". (Type check passed).
-[32m2026-10-01 19:44:40 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - gold__flight_events - ASSET_CHECK_EVALUATION - Asset check 'events_in_order' on 'gold/flight_events' passed.
-[32m2026-10-01 19:44:40 +0700[0m - dagster - [34mDEBUG[0m - flight_pipeline - eff73dd8-2b79-4752-9e32-de46a3ea6ff4 - 95890 - gold__flight_events - STEP_SUCCESS - Finished execution of step "gold__flight_events" in 2.52s.

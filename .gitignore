@@ -1,5 +1,34 @@
-# Local state for the optional publication experiment.
+# macOS
+.DS_Store
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local environment settings; keep shareable templates
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Dagster runtime state; keep the shared instance configuration
+dagster_home/*
+!dagster_home/dagster.yaml
 publication_dagster_home/
-__pycache__/gold_publication.*.pyc
-__pycache__/publication_pipeline.*.pyc
-__pycache__/publication_experiment.*.pyc
+
+# Local QAR inputs and decoded data
+raw/
+decoded/
+
+# Runtime logs
+*.log
+
+# Keep results/ versionable for reviewed experiment evidence.
