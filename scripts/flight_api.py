@@ -1,4 +1,5 @@
 """Fixed SELECT endpoints for Silver flights and their Gold details."""
+import os
 import trino
 from requests.exceptions import RequestException
 from bi_demo_settings import get_query_identity
@@ -11,7 +12,8 @@ class FlightAPIError(Exception):
 
 
 def query(sql, parameters=None):
-    connection = trino.dbapi.connect(host="127.0.0.1", port=8083,
+    connection = trino.dbapi.connect(host=os.environ.get("TRINO_HOST", "127.0.0.1"),
+                                    port=int(os.environ.get("TRINO_PORT", "8083")),
                                     user=get_query_identity(), catalog="iceberg",
                                     request_timeout=20, max_attempts=1)
     try:

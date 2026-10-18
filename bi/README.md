@@ -174,7 +174,9 @@ API อ่าน metadata สูงสุด 1,000 เที่ยวบิน�
 ใช้ parameterized query ของ flight ID เพื่ออ่าน metadata, summary, phases และ events
 ไม่มี endpoint รับ SQL หรือเปลี่ยน identity จาก browser; ใช้ fixed identity จาก settings
 เดียวกับ BI (เครื่องเดโมนี้เป็น admin) เวลาแสดงเป็น UTC
-หลังแก้ Python server ให้ restart `scripts/serve_bi_demo.py` และ reload หน้าเว็บ
+เว็บ server รันเป็น service `bi-web` ใน `docker-compose.bi-local.yaml` (build หน้าเว็บใหม่ทุกครั้งที่ start)
+หลังแก้ไฟล์ใน `scripts/` หรือ `bi/web/qar-flight-analytics_3.html` ให้รัน
+`docker compose -f docker-compose.bi-local.yaml restart bi-web` แล้ว reload หน้าเว็บ
 
 `serve_bi_demo.py` ให้บริการเว็บเฉพาะ loopback และออก JWT อายุ 10 นาทีสำหรับ dashboard เดียว
 เว็บต่ออายุทุก 8 นาที มีปุ่ม refresh และเปิด dashboard แยกแท็บ
@@ -189,7 +191,8 @@ powershell -File scripts/start_bi_demo.ps1 -CheckOnly
 ตรวจจำนวนข้อมูล/quality gates/OPA denials และทุก Metabase card รวม filters,
 no-match case, signed metadata และการปฏิเสธ token ปลอม
 `-NoWeb` ใช้เปิด stack และเตรียม BI โดยไม่เปิดเว็บ server
-หากจะเปิดเว็บใน terminal เองใช้ `python scripts/serve_bi_demo.py` และหยุดด้วย Ctrl+C
+หากจะเปิดเว็บใน terminal เองแทน container ให้ `docker compose -f docker-compose.bi-local.yaml stop bi-web` ก่อน
+แล้วใช้ `python scripts/serve_bi_demo.py` และหยุดด้วย Ctrl+C
 
 หยุด containers ของเดโมนี้โดยเก็บข้อมูลไว้:
 

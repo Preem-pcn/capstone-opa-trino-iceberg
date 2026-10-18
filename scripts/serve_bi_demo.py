@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import time
 from datetime import date, datetime
 from decimal import Decimal
@@ -102,7 +103,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = ThreadingHTTPServer((os.environ.get("BI_WEB_BIND", "127.0.0.1"), args.port), Handler)
     print(f"QAR Gold Reports: http://localhost:{args.port}/#gold", flush=True)
     try:
         server.serve_forever()

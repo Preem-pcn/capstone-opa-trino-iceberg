@@ -4,45 +4,45 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-/* Layout: persistent navy sidebar + white topbar; light slate canvas with bordered cards; cockpit and SQL editor sit in dark instrument panels. Tokens follow the Figma stakeholder prototype. */
+/* Layout: persistent purple sidebar + white topbar; light slate canvas with bordered cards; cockpit and SQL editor sit in dark instrument panels. Tokens follow the Figma stakeholder prototype. */
 :root{
-  --bg:#F1F5F8; --surface:#FFFFFF; --surface-2:#F4F7FA; --line:#DCE4EC; --line-2:#E9EEF3;
-  --ink:#14263A; --ink-2:#4A5D72; --ink-3:#7A8A9C;
-  --nav:#10233A; --nav-2:#1B3552; --nav-hover:#16304A; --nav-line:#2A4562; --nav-ink:#C9D6E3; --nav-ink-2:#8DA2B8; --nav-strong:#FFFFFF;
-  --accent:#2E6DA4; --accent-hover:#275E8E; --accent-ink:#FFFFFF; --accent-soft:#E6F0F8; --accent-text:#2A6699;
-  --teal:#178C87; --teal-bright:#5FD0C7; --teal-soft:#DDF1EE; --teal-text:#127A75;
-  --amber:#C98A2E; --amber-soft:#FCEBD6; --amber-text:#A25B14;
+  --bg:#F6F3FA; --surface:#FFFFFF; --surface-2:#F9F6FC; --line:#E3DCEE; --line-2:#EEE9F5;
+  --ink:#22143A; --ink-2:#5A4C70; --ink-3:#8A7FA0;
+  --nav:#2E1A5E; --nav-2:#452A80; --nav-hover:#3A2270; --nav-line:#4D3487; --nav-ink:#DCD2EE; --nav-ink-2:#A99BC8; --nav-strong:#FFFFFF;
+  --accent:#5B2C91; --accent-hover:#4A2278; --accent-ink:#FFFFFF; --accent-soft:#EEE6F7; --accent-text:#5B2C91;
+  --teal:#B5177A; --teal-bright:#F5C518; --teal-soft:#F8E1EF; --teal-text:#A0136B;
+  --amber:#D4A20C; --amber-soft:#FDF3D0; --amber-text:#8A6400;
   --red-soft:#FBE4E4; --red-text:#B4363A; --green-text:#1E7A45;
-  --cockpit:#0F1E2D; --cockpit-2:#17314B; --cockpit-line:#24415E; --cockpit-ink:#E6EEF6; --cockpit-ink-2:#8FA6BD;
-  --code-bg:#0F1D2A; --code-ink:#CBD7E3; --code-kw:#5FC6C0; --code-str:#E3B873; --code-num:#9CC7F0; --code-ln:#5A7088; --code-sel:#2A4A6B;
+  --cockpit:#1E0F38; --cockpit-2:#2E1A55; --cockpit-line:#3D2669; --cockpit-ink:#EEE8F7; --cockpit-ink-2:#A99BC8;
+  --code-bg:#1C0E33; --code-ink:#DCD2EE; --code-kw:#E58BC4; --code-str:#F5C518; --code-num:#C7B3EE; --code-ln:#7A6A99; --code-sel:#3E2A66;
   --ph-go:#A3B4C4; --ph-cl:#85BCCB; --ph-cr:#3C8FB5; --ph-de:#C4A26C; --ph-gi:#8E9BB0; --ev:#A8692C;
-  --sky:#3876A8; --ground:#8E6C48; --horizon:#F4F4F4; --wing:#F2C14E;
-  --overlay:rgba(16,35,58,.12);
+  --sky:#3876A8; --ground:#8E6C48; --horizon:#F4F4F4; --wing:#F5C518;
+  --overlay:rgba(46,18,80,.14);
   --f-ui:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0C1621; --surface:#13212F; --surface-2:#172838; --line:#26394D; --line-2:#1E3043;
-    --ink:#E3ECF4; --ink-2:#A6B8C9; --ink-3:#7C90A4;
-    --nav:#09131D; --nav-2:#17304A; --nav-hover:#12263A; --nav-line:#1F364F;
-    --accent:#4C8FC9; --accent-hover:#5C9DD6; --accent-ink:#06121D; --accent-soft:#183552; --accent-text:#93C3EC;
-    --teal:#2BA59F; --teal-soft:#123B39; --teal-text:#72D5CD;
-    --amber-soft:#3B2A14; --amber-text:#E9B36D; --red-soft:#3B1D21; --red-text:#F2908F; --green-text:#6CCB8F;
-    --cockpit:#08131E; --cockpit-2:#132B42; --cockpit-line:#1F3B57;
-    --code-bg:#08131E; --overlay:rgba(0,0,0,.4);
+    --bg:#150B26; --surface:#1F1236; --surface-2:#261742; --line:#3A2960; --line-2:#2E1F50;
+    --ink:#EEE8F7; --ink-2:#BDB0D6; --ink-3:#8E80AB;
+    --nav:#100720; --nav-2:#2E1A55; --nav-hover:#221340; --nav-line:#33215A;
+    --accent:#A57BE0; --accent-hover:#B590E8; --accent-ink:#150B26; --accent-soft:#34205C; --accent-text:#CDB4F2;
+    --teal:#D6409A; --teal-soft:#42173A; --teal-text:#F28FC9;
+    --amber-soft:#3D3010; --amber-text:#F5C518; --red-soft:#3B1D21; --red-text:#F2908F; --green-text:#6CCB8F;
+    --cockpit:#0E0619; --cockpit-2:#24134A; --cockpit-line:#352260;
+    --code-bg:#0E0619; --overlay:rgba(0,0,0,.45);
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0C1621; --surface:#13212F; --surface-2:#172838; --line:#26394D; --line-2:#1E3043;
-  --ink:#E3ECF4; --ink-2:#A6B8C9; --ink-3:#7C90A4;
-  --nav:#09131D; --nav-2:#17304A; --nav-hover:#12263A; --nav-line:#1F364F;
-  --accent:#4C8FC9; --accent-hover:#5C9DD6; --accent-ink:#06121D; --accent-soft:#183552; --accent-text:#93C3EC;
-  --teal:#2BA59F; --teal-soft:#123B39; --teal-text:#72D5CD;
-  --amber-soft:#3B2A14; --amber-text:#E9B36D; --red-soft:#3B1D21; --red-text:#F2908F; --green-text:#6CCB8F;
-  --cockpit:#08131E; --cockpit-2:#132B42; --cockpit-line:#1F3B57;
-  --code-bg:#08131E; --overlay:rgba(0,0,0,.4);
+  --bg:#150B26; --surface:#1F1236; --surface-2:#261742; --line:#3A2960; --line-2:#2E1F50;
+  --ink:#EEE8F7; --ink-2:#BDB0D6; --ink-3:#8E80AB;
+  --nav:#100720; --nav-2:#2E1A55; --nav-hover:#221340; --nav-line:#33215A;
+  --accent:#A57BE0; --accent-hover:#B590E8; --accent-ink:#150B26; --accent-soft:#34205C; --accent-text:#CDB4F2;
+  --teal:#D6409A; --teal-soft:#42173A; --teal-text:#F28FC9;
+  --amber-soft:#3D3010; --amber-text:#F5C518; --red-soft:#3B1D21; --red-text:#F2908F; --green-text:#6CCB8F;
+  --cockpit:#0E0619; --cockpit-2:#24134A; --cockpit-line:#352260;
+  --code-bg:#0E0619; --overlay:rgba(0,0,0,.45);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -389,7 +389,7 @@ input[type=range].rng::-moz-range-thumb{width:13px;height:13px;border-radius:50%
 
 .st-card{overflow-x:auto}
 .st{min-width:980px;--st-line:var(--ink-3)}
-:root{--st1:#2E6DA4;--st2:#178C87;--st3:#5B4B9A;--st4:#B9772A;--st5:#5E6E80}
+:root{--st1:#5B2C91;--st2:#B5177A;--st3:#7A4FB8;--st4:#C9940A;--st5:#6E6585}
 .st-home{margin:0 auto;width:max-content;text-align:center;border:2px solid var(--ink);border-radius:8px;padding:10px 18px;position:relative;background:var(--surface)}
 .st-home b{display:block;font-size:15px}.st-home small{font-size:11.5px;color:var(--ink-3)}
 .st-home::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:22px;background:var(--st-line)}

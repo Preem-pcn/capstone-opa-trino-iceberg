@@ -101,6 +101,31 @@ services:
       interval: 5s
       retries: 60
       start_period: 120s
+  # Web page + flight API (scripts/serve_bi_demo.py). Rebuilds the page from the v3 source on every start.
+  bi-web:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.13-slim
+        RUN pip install --no-cache-dir trino==0.340.0
+        WORKDIR /app
+    depends_on:
+      trino: {condition: service_healthy}
+    command: ["sh", "-c", "python scripts/build_bi_page.py && exec python -u scripts/serve_bi_demo.py"]
+    environment:
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      BI_WEB_BIND: 0.0.0.0
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./bi/web:/app/bi/web
+      - ./.secrets:/app/.secrets:ro
+    ports: ["127.0.0.1:8766:8766"]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8766/api/bi/health')"]
+      interval: 5s
+      retries: 12
 volumes:
   rustfs_data:
   catalog_data:
