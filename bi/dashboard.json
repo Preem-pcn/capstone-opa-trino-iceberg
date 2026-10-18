@@ -48,7 +48,8 @@
         "graph.metrics": [
           "flight_count"
         ],
-        "graph.x_axis.title_text": "Route",
+        "graph.x_axis.title_text": "Route (demo order)",
+        "graph.x_axis.scale": "ordinal",
         "graph.y_axis.title_text": "Flights"
       },
       "row": 6,

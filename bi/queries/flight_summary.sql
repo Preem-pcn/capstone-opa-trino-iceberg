@@ -1,6 +1,7 @@
 SELECT s.flight_date,
        substr(lower(to_hex(sha256(to_utf8(s.flight_id)))), 1, 12) AS flight_reference,
        s.aircraft_type,
+       CASE WHEN s.flight_id LIKE 'DEMO-%' THEN 'Synthetic demo' ELSE 'Decoded recording' END AS data_source,
        s.origin,
        s.destination,
        s.airborne_min,

@@ -70,10 +70,10 @@ def verify(folders):
     print("PASS source: capstone-opa-trino-iceberg / Trino 8083 / local decoded", flush=True)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     folders = sorted(path.parent for path in (ROOT / "decoded").glob("*/report.json"))
     if not folders:
         raise RuntimeError("No decoded recordings found in this checkout")
@@ -92,14 +92,16 @@ def main():
         "s3.secret-access-key": "rustfsadmin", "s3.region": "us-east-1",
     })
     changed = False
+    existing_counts = dict(execute("SELECT flight_id,count(*) FROM iceberg.silver.flights GROUP BY flight_id"))
     for folder in folders:
         fid = loader.read_flight(folder)["flight_id"]
-        count = execute("SELECT count(*) FROM iceberg.silver.flights WHERE flight_id = " + literal(fid))[0][0]
+        count = existing_counts.get(fid, 0)
         if count == 1:
             print("Already loaded:", folder.name, flush=True)
         elif count == 0:
             print("Loading:", folder.name, flush=True)
             loader.load_recording(catalog, folder)
+            existing_counts[fid] = 1
             changed = True
         else:
             raise RuntimeError("Duplicate Silver flight metadata")

@@ -38,7 +38,7 @@ SQLite catalog และ Metabase H2 พร้อมกำหนด memory limit
 
 `scripts/load_bi_samples.py` อ่าน recording ที่มี `report.json` ใน `decoded/` ของ repo นี้
 ใช้ `load_silver.load_recording()` เดิมสร้าง Silver และใช้ `sql/04_gold.sql` เดิมสร้าง Gold
-ไม่ได้ย้ายตารางหรือคัดลอกข้อมูลจาก stack เก่า และไม่ได้สร้าง synthetic flight เพิ่ม
+ไม่ได้ย้ายตารางหรือคัดลอกข้อมูลจาก stack เก่า ตัว loader ไม่สร้าง synthetic flight ขึ้นเอง
 รอบนี้เรียก loader/SQL โดยตรง ไม่ได้รัน Dagster materialization
 
 เที่ยวบินตัวอย่างทั้งสามมาจากโฟลเดอร์:
@@ -47,10 +47,72 @@ SQLite catalog และ Metabase H2 พร้อมกำหนด memory limit
 - `A350_HS-THE_20220826_TG0000_VTBS-RKSI`
 - `A350_HS-THJ_20220921_TG0000_ESSA-VTBS`
 
-หลังโหลดได้ Silver flights 3 แถว, Gold summaries 3 แถว, phases 15 แถว และ events 12 แถว
+เมื่อโหลดเฉพาะข้อมูลจริงข้างต้น จะได้ Silver flights 3 แถว, Gold summaries 3 แถว, phases 15 แถว และ events 12 แถว
 ตรวจ quality gates เดิมทั้ง 3 ข้อ: phase coverage, event order และ segmentation delta
 การรันซ้ำข้าม recording ที่มี Silver flight metadata แล้ว และไม่ rebuild Gold หากครบอยู่แล้ว
 ไม่ได้ตั้งให้ตรวจจับการแก้ไฟล์ decoded ที่โหลดสำเร็จไปแล้วโดยอัตโนมัติ
+
+### เพิ่มเที่ยวบินจำลองอีก 5 เที่ยวบิน
+
+เมื่อเปิด stack แล้ว รัน:
+
+สคริปต์จำลองใช้ `numpy` เพิ่มจาก dependencies ของ loader เดิม
+
+```powershell
+python scripts/add_demo_flights.py
+python scripts/setup_bi_demo.py
+```
+
+คำสั่งแรกสร้าง recording จำลองที่มีชื่อ tail `DEMO-*` และ flight number `DEMO001`–`DEMO005`
+ใน `decoded/` แล้วโหลดผ่าน Silver → Gold ด้วย loader/SQL เดิม คำสั่งที่สองอัปเดต cards
+เพื่อแสดงคอลัมน์ `data_source` แยก `Synthetic demo` กับ `Decoded recording`
+จากนั้นกด Refresh dashboard ในหน้าเว็บ
+
+เพิ่ม A350 3 เที่ยวบินและ B777 2 เที่ยวบิน วันที่ 22–26 กันยายน 2022
+เส้นทาง VTBS–RJAA, RKSI–VTBS, VTBS–WSSS, VHHH–VTBS และ EGLL–ESSA
+รวมกับข้อมูลจริงเป็น 8 summaries, 40 phases และ 32 events
+ข้อมูลจำลองมีเฉพาะ ALT_STD 1 Hz, AC_GROUND 4 Hz และ VRTG 8 Hz
+ซึ่งจำเป็นสำหรับ Gold SQL นี้ คอลัมน์ sensor อื่นในสาม rate tables นี้เป็น null
+และไม่ได้สร้างข้อมูล rate อื่น ไม่ใช่การจำลอง QAR ครบทุก parameter
+รายงาน JSON/Parquet ระบุแหล่งข้อมูล synthetic ชัดเจน ค่าเวลา/ความสูง/g สร้างขึ้นเพื่อทดสอบ UI
+ไม่ใช่ค่าที่วัดจากเที่ยวบินจริงหรือข้อมูลสำหรับวิเคราะห์ความปลอดภัย
+
+ใช้ ID และวันที่คงที่ รันซ้ำไม่เพิ่มเที่ยวบินซ้ำ ไม่เขียนทับ recording จริง
+สคริปต์ตรวจ quality gates เดิม, จำนวนแถวจำลอง และค่าของ summary เที่ยวบินจริงว่าไม่เปลี่ยน
+ไฟล์จำลองถูก Git ignore เหมือน decoded อื่น ผู้ที่ clone repo สามารถสร้างใหม่ด้วยสคริปต์นี้
+ใช้ `--generate-only` หากต้องการสร้างไฟล์ก่อนโดยยังไม่เชื่อมฐานข้อมูล
+เมื่อรัน startup/loader ครั้งถัดไป ระบบจะพบ report.json เหล่านี้และโหลดตามปกติ
+
+### เพิ่มอีก 100 เที่ยวบินโดยให้จำนวนต่อ route เป็นโค้งระฆัง
+
+```powershell
+python scripts/add_normal_route_flights.py
+python scripts/setup_bi_demo.py
+```
+
+เป็นชุดใหม่ 100 เที่ยวบิน (`NORM0001`–`NORM0100`, tail `DEMO-N*`)
+เพิ่มจาก 8 เที่ยวบินเดิม รวมเป็น 108 summaries, 540 phases และ 432 events
+วันที่ 1–25 ตุลาคม 2022 ใช้ seed 42 เพื่อให้สร้างซ้ำได้เหมือนเดิม
+จำนวนเที่ยวบินตามลำดับ routes ใน `normal_routes.json` คือ
+`1, 4, 12, 21, 25, 21, 11, 4, 1` รวม 100
+คำนวณจาก Gaussian weights ที่ sigma = 1.6 ตำแหน่ง route แล้วปัดจำนวนให้รวมครบ 100
+route เป็นหมวดหมู่ จึงเป็นการกระจายตามลำดับที่กำหนด ไม่ใช่ normal distribution ของพิกัดสนามบิน
+ลำดับนี้จัดเพื่อทดสอบกราฟ ไม่ใช่อันดับความนิยมจริงหรืออันดับระยะทาง
+
+กราฟ Flights by route เรียงตามลำดับนี้เพื่อให้เห็นรูปโค้งระฆัง
+เมื่อรวมเที่ยวบินเดิมอีก 8 รายการ แต่ละ route จะมีจำนวนต่างจากชุด 100 ใหม่นี้เล็กน้อย
+ไฟล์ config มี 9 routes และเวลา airborne อ้างอิงสำหรับสร้างสัญญาณจำลอง
+เวลา airborne, aircraft type, altitude และ peak g มี variation แบบ deterministic
+ค่าเหล่านี้เป็นข้อมูลสร้างขึ้นสำหรับเดโมเช่นเดียวกับชุด 5 เที่ยวบิน
+
+สคริปต์โหลด Silver ทีละ 10 เที่ยวบิน และใช้ SQL per-flight เดิมใน `sql/05_gold_*.sql`
+โดยเปลี่ยนเงื่อนไขเท่ากับ ID เดียวเป็น IN ของ ID ใน batch เท่านั้น
+events → phases → summary ยังใช้กฎเดิม แต่ประมวลผลทีละ batch เพื่อจำกัด memory
+ไม่ rebuild Gold ของเที่ยวบินเดิม และตรวจว่าค่ากับ built_at ของ summary เดิมไม่เปลี่ยน
+รันซ้ำไม่เพิ่มแถวซ้ำ; batch ที่ยังเขียน Gold ไม่ครบจะถูกสร้างใหม่เฉพาะ ID ใน batch นั้น
+ห้ามรัน loader หรือ generator หลายตัวพร้อมกันบน stack เดียวกัน
+`--generate-only` ใช้สร้างไฟล์โดยยังไม่โหลด เช่นเดียวกับสคริปต์ชุดเล็ก
+ต้องเปิด stack และมีตาราง Silver/Gold จาก startup script ก่อนรันชุด 100 นี้
 
 ## Metabase และหน้าเว็บ
 
@@ -90,8 +152,29 @@ reference ของ flight ในรายงานเป็น SHA-256 prefix 1
 โดยไม่ต้องมีโฟลเดอร์ visualization ภายนอก ไฟล์ต้นฉบับในเครื่องยังอยู่เหมือนเดิม
 `scripts/build_bi_page.py` สร้างเว็บที่ `bi/web/qar-flight-analytics-capstone-metabase.html`
 ไฟล์ที่สร้างนี้ถูก Git ignore และ startup script จะ build ให้อัตโนมัติ
-Gold Reports แสดง dashboard จริง ส่วน Flight Explorer/Cockpit/SQL Workspace
-ยังเป็น prototype เดิม ตัวเลือก Demo identity ไม่มีผลต่อ shared BI connection นี้
+Gold Reports แสดง dashboard จริง และ Flight Explorer อ่านรายการจาก Silver ผ่าน Trino
+พร้อมเปิดรายละเอียดจาก Silver และ metrics/phases/events จาก Gold ตาม flight ID ที่เลือก
+ส่วน Cockpit และ SQL Workspace ยังใช้ข้อมูล prototype เดิม
+ตัวเลือก Demo identity ใช้กับ OPA fixtures ไม่มีผลต่อ shared BI connection หรือ Flight API
+
+### Flight Explorer
+
+เปิด **http://localhost:8766/#explorer** เพื่อดูข้อมูล `iceberg.silver.flights`
+รวมเที่ยวบินจริงและเที่ยวบินจำลองที่โหลดเข้ามาแล้ว (ชุดเดโมปัจจุบัน 108 เที่ยวบิน:
+ข้อมูลจริง 3 และจำลอง 105) มีป้าย Recorded / Synthetic demo ให้แยกแหล่งข้อมูล
+เลขเที่ยวบินแสดงตามที่เก็บใน Silver เช่น `TG0000` ของ decoded บาง recording
+ไม่ได้แทนที่ด้วยเลขเที่ยวบินตัวอย่างจากต้นแบบ
+
+ค้นหาด้วยเลขเที่ยวบิน, flight ID หรือ tail และกรองวันบิน/ชนิดเครื่อง/ต้นทาง/ปลายทาง/แหล่งข้อมูล
+แบ่งหน้าครั้งละ 20 รายการ เรียงวันที่ใหม่ก่อน ปุ่ม Refresh flights อ่านข้อมูลจาก Trino ใหม่
+API อ่าน metadata สูงสุด 1,000 เที่ยวบินและแสดงข้อความหากมีข้อมูลเกินขอบเขตนี้
+ตัวกรองและการแบ่งหน้าทำใน browser บนรายการที่โหลดมา ไม่ดึง sensor arrays ในหน้ารายการ
+
+`GET /api/flights` ใช้ SELECT ที่กำหนดไว้ และ `GET /api/flights/detail?id=...`
+ใช้ parameterized query ของ flight ID เพื่ออ่าน metadata, summary, phases และ events
+ไม่มี endpoint รับ SQL หรือเปลี่ยน identity จาก browser; ใช้ fixed identity จาก settings
+เดียวกับ BI (เครื่องเดโมนี้เป็น admin) เวลาแสดงเป็น UTC
+หลังแก้ Python server ให้ restart `scripts/serve_bi_demo.py` และ reload หน้าเว็บ
 
 `serve_bi_demo.py` ให้บริการเว็บเฉพาะ loopback และออก JWT อายุ 10 นาทีสำหรับ dashboard เดียว
 เว็บต่ออายุทุก 8 นาที มีปุ่ม refresh และเปิด dashboard แยกแท็บ

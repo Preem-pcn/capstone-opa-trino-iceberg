@@ -1,0 +1,15 @@
+{
+  "seed": 42,
+  "sigma_in_route_positions": 1.6,
+  "routes": [
+    {"origin": "EGLL", "destination": "ESSA", "airborne_min": 140},
+    {"origin": "VTBS", "destination": "WSSS", "airborne_min": 125},
+    {"origin": "VHHH", "destination": "VTBS", "airborne_min": 160},
+    {"origin": "VTBS", "destination": "OPKC", "airborne_min": 268},
+    {"origin": "RKSI", "destination": "VTBS", "airborne_min": 310},
+    {"origin": "VTBS", "destination": "RKSI", "airborne_min": 299},
+    {"origin": "VTBS", "destination": "RJAA", "airborne_min": 330},
+    {"origin": "ESSA", "destination": "VTBS", "airborne_min": 485},
+    {"origin": "VTBS", "destination": "YSSY", "airborne_min": 540}
+  ]
+}

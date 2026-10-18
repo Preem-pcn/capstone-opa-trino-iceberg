@@ -11,10 +11,13 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import date, datetime
+from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from bi_demo_settings import get_query_identity
+from flight_api import FlightAPIError, flight_detail, list_flights
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / ".secrets/metabase-embed.json"
@@ -23,6 +26,14 @@ PAGE = ROOT / "bi/web/qar-flight-analytics-capstone-metabase.html"
 
 def b64url(raw):
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def json_value(value):
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    raise TypeError("Unsupported JSON value")
 
 
 def embed_info():
@@ -42,7 +53,7 @@ def embed_info():
 class Handler(BaseHTTPRequestHandler):
     def reply(self, status, data, content_type="application/json; charset=utf-8", headers=None):
         if isinstance(data, dict):
-            data = json.dumps(data, ensure_ascii=False).encode()
+            data = json.dumps(data, ensure_ascii=False, default=json_value).encode()
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
@@ -64,6 +75,11 @@ class Handler(BaseHTTPRequestHandler):
                                  "page_ready": PAGE.is_file()})
             elif path == "/api/bi/embed":
                 self.reply(200, embed_info())
+            elif path == "/api/flights":
+                self.reply(200, list_flights())
+            elif path == "/api/flights/detail":
+                parameters = parse_qs(urlsplit(self.path).query)
+                self.reply(200, flight_detail(parameters.get("id", [""])[0]))
             elif path == "/metabase":
                 self.reply(302, b"", headers={"Location": embed_info()["embed_url"]})
             elif path in {"/", "/" + PAGE.name}:
@@ -72,6 +88,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(204, b"", "image/x-icon")
             else:
                 self.reply(404, {"error": "Not found"})
+        except FlightAPIError as error:
+            self.reply(error.status, {"error": str(error)})
         except (FileNotFoundError, KeyError, ValueError):
             self.reply(503, {"error": "Run setup_bi_demo.py to configure the local embedded dashboard."})
 

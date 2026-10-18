@@ -58,11 +58,27 @@ def build():
     if identity == "admin":
         gold = gold.replace("admin · read-only", "admin · demo")
     text = text[:start] + gold + "\n" + text[end:]
+    explorer_start = text.index("/* =====================================================================\n   PAGE: FLIGHT EXPLORER")
+    explorer_end = text.index("/* =====================================================================\n   PAGE: FLIGHT DETAIL", explorer_start)
+    text = text[:explorer_start] + (ROOT / "bi/web/flight-explorer.js").read_text(encoding="utf-8") + "\n" + text[explorer_end:]
+    text = text.replace("function vFlight(){", "function vFlight(){\n  if(S.liveFlightId && S.flight===S.liveFlightId) return vLiveFlight();", 1)
+    text = text.replace("function crumbs(){", "function crumbs(){\n  if(S.page==='flight' && S.liveFlightId && S.flight===S.liveFlightId) return liveFlightCrumbs();", 1)
+    text = text.replace("  f:{q:'', from:'2022-01-01', to:'2022-12-31', type:'', org:'', dst:''},", "  f:{q:'', from:'', to:'', type:'', org:'', dst:'', source:''},", 1)
     anchor = "function render(){\n  renderSide(); renderTop();"
     if text.count(anchor) != 1:
         raise ValueError("Source render structure changed; review before rebuilding.")
     text = text.replace(anchor, "function render(){\n  clearTimeout(goldRefreshTimer);\n  renderSide(); renderTop();")
     text = text.replace("  if(S.page==='sql') setupEditor();", "  if(S.page==='gold') initGoldEmbed();\n  if(S.page==='sql') setupEditor();", 1)
+    text = text.replace("  if(S.page==='sql') setupEditor();", "  if(S.page==='explorer') initFlightExplorer();\n  if(S.page==='flight' && S.liveFlightId && S.flight===S.liveFlightId) initLiveFlight();\n  if(S.page==='sql') setupEditor();", 1)
+    text = text.replace("    case 'open-flight':", """    case 'live-flight': e.stopPropagation(); openLiveFlight(d.id); break;
+    case 'ex-refresh': initFlightExplorer(true); break;
+    case 'ex-source': S.f.source=d.source; LIVE.page=1; render(); break;
+    case 'ex-page': LIVE.page=+d.page; $('#ex-rows').innerHTML=explorerRows(); break;
+    case 'open-flight':""", 1)
+    text = text.replace("S.f={q:'',from:'2022-01-01',to:'2022-12-31',type:'',org:'',dst:''};", "S.f={q:'',from:'',to:'',type:'',org:'',dst:'',source:''}; LIVE.page=1;", 1)
+    text = text.replace("S.f.from=f; S.f.to=t;", "S.f.from=f; S.f.to=t; LIVE.page=1;", 1)
+    text = text.replace("S.f.q=t.value;", "S.f.q=t.value; LIVE.page=1;", 1)
+    text = text.replace("S.f[map[t.id]]=t.value;", "S.f[map[t.id]]=t.value; LIVE.page=1;", 1)
     original_action = "case 'metabase': toast('Metabase handoff is proposed · not connected in this prototype.'); break;"
     if text.count(original_action) != 1:
         raise ValueError("Source Metabase action changed; review before rebuilding.")
@@ -76,7 +92,8 @@ def build():
     ]],
 """.replace("safety_analyst", identity) + text[gold_map_end:]
     text = text.replace("Metabase handoff and dashboard filters are proposed; only one verified Gold flight represented.",
-                        f"Gold Reports embeds a live Metabase dashboard querying existing Gold through the shared capstone Trino {identity} connection. Other pages remain prototype data.")
+                        f"Flight Explorer reads Silver through Trino. Gold Reports embeds a live Metabase dashboard using the shared capstone Trino {identity} connection. Cockpit and SQL Workspace retain prototype data.")
+    text = text.replace("These charts read this repo’s Gold tables; the other prototype pages keep their sample data.", "These charts read this repo’s Gold tables. Flight Explorer reads Silver; Cockpit and SQL Workspace keep their prototype data.")
     text = text.replace("Gold Reports → Flights table → <b>Flight Detail</b>",
                         "Gold Reports → <b>Metabase dashboard</b> (live Gold; cross-page drill-through is not configured)")
     text = text.replace("</style>", """\n/* Live Metabase panel */
@@ -84,6 +101,8 @@ def build():
 .bi-dashboard iframe{display:block;width:100%;height:1560px;border:0;background:white;border-radius:6px}
 .bi-dashboard iframe[hidden]{display:none}
 .bi-load-state{padding:24px;color:var(--ink-2)}
+.ex-pagination{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 10px 0;font-size:12px;color:var(--ink-2)}
+.kv dd{overflow-wrap:anywhere}
 </style>""", 1)
     if '<meta charset=' not in text.lower():
         text = '<meta charset="utf-8">\n' + text
