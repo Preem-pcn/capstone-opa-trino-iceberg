@@ -1,0 +1,103 @@
+{
+  "name": "QAR Gold Overview - capstone repo",
+  "description": "Existing Gold tables generated from this repository decoded recordings. Source: capstone-opa-trino-iceberg, Trino port 8083, safety_analyst.",
+  "intro": "## QAR · Gold Overview\nข้อมูลจริงใน Gold ผ่าน Trino · เวลา UTC · ตัวชี้วัด POC รอยืนยันกับ TG\n\nPhases รวม ground · ตารางสูงสุด 200 แถว · จำนวนเที่ยวบินนับเฉพาะ Gold",
+  "cards": [
+    {
+      "key": "flight_count",
+      "name": "Flights in Gold",
+      "display": "scalar",
+      "query": "flight_count.sql",
+      "settings": {},
+      "row": 3,
+      "col": 0,
+      "size_x": 8,
+      "size_y": 4
+    },
+    {
+      "key": "airborne_minutes",
+      "name": "Total airborne time · min",
+      "display": "scalar",
+      "query": "airborne_minutes.sql",
+      "settings": {},
+      "row": 3,
+      "col": 8,
+      "size_x": 8,
+      "size_y": 4
+    },
+    {
+      "key": "max_altitude",
+      "name": "Maximum altitude · ft",
+      "display": "scalar",
+      "query": "max_altitude.sql",
+      "settings": {},
+      "row": 3,
+      "col": 16,
+      "size_x": 8,
+      "size_y": 4
+    },
+    {
+      "key": "flights_by_route",
+      "name": "Flights by route",
+      "display": "bar",
+      "query": "flights_by_route.sql",
+      "settings": {
+        "graph.dimensions": [
+          "route"
+        ],
+        "graph.metrics": [
+          "flight_count"
+        ],
+        "graph.x_axis.title_text": "Route",
+        "graph.y_axis.title_text": "Flights"
+      },
+      "row": 7,
+      "col": 0,
+      "size_x": 12,
+      "size_y": 7
+    },
+    {
+      "key": "phase_minutes",
+      "name": "Time by phase · min (including ground)",
+      "display": "bar",
+      "query": "phase_minutes.sql",
+      "settings": {
+        "graph.dimensions": [
+          "phase"
+        ],
+        "graph.metrics": [
+          "duration_minutes"
+        ],
+        "graph.x_axis.title_text": "Phase",
+        "graph.y_axis.title_text": "Minutes",
+        "graph.x_axis.scale": "ordinal"
+      },
+      "row": 7,
+      "col": 12,
+      "size_x": 12,
+      "size_y": 7
+    },
+    {
+      "key": "flight_summary",
+      "name": "Flight summary · existing Gold data",
+      "display": "table",
+      "query": "flight_summary.sql",
+      "settings": {},
+      "row": 14,
+      "col": 0,
+      "size_x": 24,
+      "size_y": 7
+    },
+    {
+      "key": "flight_events",
+      "name": "Detected events · prototype rules",
+      "display": "table",
+      "query": "flight_events.sql",
+      "settings": {},
+      "row": 21,
+      "col": 0,
+      "size_x": 24,
+      "size_y": 7
+    }
+  ]
+}
