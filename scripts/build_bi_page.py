@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+from bi_demo_settings import get_query_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "bi/web/qar-flight-analytics_3.html"
@@ -49,10 +50,14 @@ async function initGoldEmbed(){
 '''
 
 def build():
+    identity = get_query_identity()
     text = SOURCE.read_text(encoding="utf-8")
     start = text.index("/* =====================================================================\n   PAGE: GOLD REPORTS")
     end = text.index("/* =====================================================================\n   PAGE: SITE MAP", start)
-    text = text[:start] + GOLD + "\n" + text[end:]
+    gold = GOLD.replace("safety_analyst", identity)
+    if identity == "admin":
+        gold = gold.replace("admin · read-only", "admin · demo")
+    text = text[:start] + gold + "\n" + text[end:]
     anchor = "function render(){\n  renderSide(); renderTop();"
     if text.count(anchor) != 1:
         raise ValueError("Source render structure changed; review before rebuilding.")
@@ -69,9 +74,9 @@ def build():
       ['Filters and KPIs','content',null,null,'flight date · aircraft type · count · time · altitude'],
       ['Charts and tables','content',null,null,'route · phases · flight summary · events'],
     ]],
-""" + text[gold_map_end:]
+""".replace("safety_analyst", identity) + text[gold_map_end:]
     text = text.replace("Metabase handoff and dashboard filters are proposed; only one verified Gold flight represented.",
-                        "Gold Reports embeds a live Metabase dashboard querying existing Gold through the shared capstone Trino safety_analyst connection. Other pages remain prototype data.")
+                        f"Gold Reports embeds a live Metabase dashboard querying existing Gold through the shared capstone Trino {identity} connection. Other pages remain prototype data.")
     text = text.replace("Gold Reports → Flights table → <b>Flight Detail</b>",
                         "Gold Reports → <b>Metabase dashboard</b> (live Gold; cross-page drill-through is not configured)")
     text = text.replace("</style>", """\n/* Live Metabase panel */

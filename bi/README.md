@@ -59,6 +59,20 @@ Metabase อยู่ใน network ของ stack ใหม่นี้ จึ
 ใช้ Starburst driver, catalog `iceberg`, schema `gold`, user `safety_analyst`
 ตาม role เดิมของ repo ที่อ่านข้อมูลได้และไม่มีสิทธิ์เขียน
 
+สำหรับเดโม สามารถเปลี่ยน fixed identity ของ connection เป็น admin ได้:
+
+```powershell
+python scripts/setup_bi_demo.py --identity admin
+python scripts/build_bi_page.py
+```
+
+ค่าที่เลือกเก็บเฉพาะเครื่องใน `.secrets/bi-demo-settings.json` รัน startup ซ้ำจะใช้ค่านี้ต่อ
+และหน้า Gold Reports แสดง identity ที่ใช้อยู่ admin มีสิทธิ์กว้างตาม policy เดิมของ repo
+หากเว็บ server เปิดอยู่ให้ restart หลังอัปเดตโค้ดเพื่อให้โหลดค่าจาก settings
+กลับไปใช้สิทธิ์อ่านข้อมูลด้วย `python scripts/setup_bi_demo.py --identity safety_analyst`
+แล้ว build หน้าเว็บอีกครั้ง ค่าเริ่มต้นของเครื่องที่ยังไม่มี settings ยังคงเป็น safety_analyst
+การตรวจรายงานใช้ `SELECT current_user` ผ่าน Metabase เพื่อยืนยัน user ที่ถึง Trino จริง
+
 repo นี้เป็น local HTTP authorization POC ที่ผู้เรียกส่งชื่อ user เอง ไม่มี password login
 ไม่เท่ากับระบบยืนยันตัวตนรายบุคคล และไม่ได้ใช้ TLS/password configuration ของ repo เก่า
 ไม่ได้เปลี่ยน OPA ให้เปิดสิทธิ์เพิ่ม บัญชี `operations_analyst` ยังคงอ่าน

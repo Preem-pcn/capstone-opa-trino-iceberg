@@ -1,7 +1,7 @@
 """Create/verify the local Metabase Gold demo without changing lakehouse data.
 
 Python standard library only. Credentials stay in ignored .secrets/ files.
-All charts query Gold as safety_analyst using this repository local HTTP/OPA setup.
+Charts use the locally configured fixed Trino identity (default safety_analyst).
 """
 
 import argparse
@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+from bi_demo_settings import IDENTITIES, get_query_identity, set_query_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTH_FILE = ROOT / ".secrets/metabase-demo.json"
@@ -93,15 +94,19 @@ def dataset(database_id, card):
     return {"database": database_id, "type": "native", "native": {"query": query, "template-tags": tags}}
 
 
-def seed(client):
+def seed(client, identity=None):
+    identity = identity or get_query_identity()
     state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if STATE_FILE.exists() else {"cards": {}}
-    connection = {"name": "Capstone Gold - Trino 8083 (safety_analyst)",
+    connection = {"name": f"Capstone Gold - Trino 8083 ({identity})",
                   "engine": "starburst", "is_full_sync": False,
                   "details": {"host": "trino", "port": 8080, "catalog": "iceberg", "schema": "gold",
-                              "user": "safety_analyst", "ssl": False, "prepared-optimized": True}}
+                              "user": identity, "ssl": False, "prepared-optimized": True}}
     if not state.get("database_id"):
         state["database_id"] = client.api("POST", "/database", connection)["id"]
         write_json(STATE_FILE, state)
+    else:
+        client.api("PUT", f'/database/{state["database_id"]}', connection)
+    set_query_identity(identity)
     if not state.get("collection_id"):
         state["collection_id"] = client.api("POST", "/collection", {
             "name": "QAR Gold BI POC", "description": MANIFEST["description"], "color": "#509EE3"})["id"]
@@ -113,7 +118,7 @@ def seed(client):
         write_json(STATE_FILE, state)
     for card in MANIFEST["cards"]:
         body = {"name": card["name"], "display": card["display"],
-                "description": "POC: existing Gold data through capstone Trino as safety_analyst; draft metric for discussion.",
+                "description": f"POC: existing Gold data through capstone Trino as {identity}; draft metric for discussion.",
                 "collection_id": state["collection_id"], "dataset_query": dataset(state["database_id"], card),
                 "visualization_settings": card["settings"]}
         existing_id = state["cards"].get(card["key"])
@@ -129,7 +134,7 @@ def seed(client):
     existing = client.api("GET", f'/dashboard/{state["dashboard_id"]}')
     previous = {c.get("card_id"): c["id"] for c in existing.get("dashcards", [])}
     dashcards = [{"id": previous.get(None, -1), "card_id": None, "row": 0, "col": 0,
-                  "size_x": 24, "size_y": 3, "parameter_mappings": [],
+                  "size_x": 24, "size_y": 2, "parameter_mappings": [],
                   "visualization_settings": {"text": MANIFEST["intro"], "virtual_card": {"display": "text"}}}]
     for index, card in enumerate(MANIFEST["cards"], start=2):
         card_id = state["cards"][card["key"]]
@@ -153,6 +158,12 @@ def query_card(client, card_id, parameters=None):
 
 
 def verify(client, state):
+    identity = get_query_identity()
+    result = client.api("POST", "/dataset", {"database": state["database_id"], "type": "native",
+                                            "native": {"query": "SELECT current_user"}})
+    if result.get("status") != "completed" or result["data"]["rows"] != [[identity]]:
+        raise RuntimeError("Metabase is not querying Trino with the configured demo identity")
+    print(f"PASS Trino current_user through Metabase: {identity}", flush=True)
     dashboard = client.api("GET", f'/dashboard/{state["dashboard_id"]}')
     chart_cards = [c for c in dashboard.get("dashcards", []) if c.get("card_id")]
     if len(chart_cards) != len(MANIFEST["cards"]):
@@ -224,7 +235,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://localhost:3002")
     parser.add_argument("--check", action="store_true", help="Verify the existing demo without updating it")
+    parser.add_argument("--identity", choices=IDENTITIES, help="Set the fixed identity for this local demo")
     args = parser.parse_args()
+    if args.check and args.identity:
+        parser.error("--check cannot change the demo identity")
     client = Metabase(args.url)
     for attempt in range(12):
         try:
@@ -237,7 +251,7 @@ def main():
         print("Waiting for Metabase health...", flush=True)
         time.sleep(5)
     client.login(allow_setup=not args.check)
-    state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if args.check else seed(client)
+    state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if args.check else seed(client, args.identity)
     verify(client, state)
     if not args.check:
         enable_embed(client, state)

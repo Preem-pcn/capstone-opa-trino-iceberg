@@ -1,7 +1,7 @@
 {
   "name": "QAR Gold Overview - capstone repo",
-  "description": "Existing Gold tables generated from this repository decoded recordings. Source: capstone-opa-trino-iceberg, Trino port 8083, safety_analyst.",
-  "intro": "## QAR · Gold Overview\nข้อมูลจริงใน Gold ผ่าน Trino · เวลา UTC · ตัวชี้วัด POC รอยืนยันกับ TG\n\nPhases รวม ground · ตารางสูงสุด 200 แถว · จำนวนเที่ยวบินนับเฉพาะ Gold",
+  "description": "Existing Gold tables generated from this repository decoded recordings. Source: capstone-opa-trino-iceberg, Trino port 8083, locally configured shared demo identity.",
+  "intro": "## QAR · Gold Overview",
   "cards": [
     {
       "key": "flight_count",
@@ -9,7 +9,7 @@
       "display": "scalar",
       "query": "flight_count.sql",
       "settings": {},
-      "row": 3,
+      "row": 2,
       "col": 0,
       "size_x": 8,
       "size_y": 4
@@ -20,7 +20,7 @@
       "display": "scalar",
       "query": "airborne_minutes.sql",
       "settings": {},
-      "row": 3,
+      "row": 2,
       "col": 8,
       "size_x": 8,
       "size_y": 4
@@ -31,7 +31,7 @@
       "display": "scalar",
       "query": "max_altitude.sql",
       "settings": {},
-      "row": 3,
+      "row": 2,
       "col": 16,
       "size_x": 8,
       "size_y": 4
@@ -51,7 +51,7 @@
         "graph.x_axis.title_text": "Route",
         "graph.y_axis.title_text": "Flights"
       },
-      "row": 7,
+      "row": 6,
       "col": 0,
       "size_x": 12,
       "size_y": 7
@@ -72,7 +72,7 @@
         "graph.y_axis.title_text": "Minutes",
         "graph.x_axis.scale": "ordinal"
       },
-      "row": 7,
+      "row": 6,
       "col": 12,
       "size_x": 12,
       "size_y": 7
@@ -83,7 +83,7 @@
       "display": "table",
       "query": "flight_summary.sql",
       "settings": {},
-      "row": 14,
+      "row": 13,
       "col": 0,
       "size_x": 24,
       "size_y": 7
@@ -94,7 +94,7 @@
       "display": "table",
       "query": "flight_events.sql",
       "settings": {},
-      "row": 21,
+      "row": 20,
       "col": 0,
       "size_x": 24,
       "size_y": 7

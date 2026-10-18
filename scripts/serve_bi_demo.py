@@ -1,6 +1,6 @@
 """Loopback-only QAR demo server. Issues short-lived tokens for one dashboard.
 
-The demo has one shared, read-only Trino identity (safety_analyst), not per-user SSO.
+The demo has one locally configured fixed Trino identity, not per-user SSO.
 No Metabase admin credentials, embedding secret, or arbitrary file access is
 exposed by this server. Keep it bound to loopback for the local demonstration.
 """
@@ -14,6 +14,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+from bi_demo_settings import get_query_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / ".secrets/metabase-embed.json"
@@ -35,7 +36,7 @@ def embed_info():
     token = unsigned + "." + signature
     return {"embed_url": config["metabase_url"].rstrip("/") + "/embed/dashboard/" + token + "#bordered=false&titled=false",
             "refresh_after_seconds": 480, "dashboard_id": int(config["dashboard_id"]),
-            "query_identity": "safety_analyst"}
+            "query_identity": get_query_identity()}
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -9,9 +9,10 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'The isolated capstone BI stack is not ready. Check its compose logs.' }
         & python -u scripts/load_bi_samples.py
         if ($LASTEXITCODE -ne 0) { throw 'Loading or checking the decoded sample data failed.' }
+        & python scripts/setup_bi_demo.py
+        if ($LASTEXITCODE -ne 0) { throw 'Metabase setup or verification failed.' }
         & python scripts/build_bi_page.py
         if ($LASTEXITCODE -ne 0) { throw 'Could not build the page from the v3 prototype.' }
-        & python scripts/setup_bi_demo.py
     } else {
         & python scripts/load_bi_samples.py --check
         if ($LASTEXITCODE -ne 0) { throw 'Sample data verification failed.' }
