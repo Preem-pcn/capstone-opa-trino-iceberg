@@ -1,6 +1,11 @@
-# Isolated local stack for this checkout. Does not merge with docker-compose.yaml.
-# Run scripts/init_bi_secrets.py first (start_bi_demo.ps1 does): it creates the .secrets/ files used below.
-# A separate project name keeps the older, password-less qar-capstone-bi stack and its volumes untouched.
+# QAR app stack: lakehouse (RustFS + Iceberg REST), Trino with OPA, Metabase, and the backend
+# (backend/: FastAPI + the React client) that signs people in with Google and serves the site.
+#
+#   python scripts/init_bi_secrets.py     # .secrets/: Trino logins, TLS, templates for sign-in
+#   docker compose -f docker-compose.app.yaml up -d --build --wait
+#
+# Same project name as the earlier docker-compose.bi-local.yaml, so its volumes (loaded Silver/Gold,
+# Metabase dashboards) carry over. Separate from docker-compose.yaml, the password-less pipeline stack.
 name: qar-capstone-sso
 services:
   rustfs:
@@ -127,52 +132,32 @@ services:
       interval: 5s
       retries: 60
       start_period: 120s
-  # Identity provider (OIDC). Dev mode, realm imported from .secrets/keycloak/ on every start.
-  # Browsers use localhost:8180; containers reach the same realm at keycloak:8080.
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.0.7
-    command: ["start-dev", "--import-realm"]
-    env_file: [.secrets/keycloak.env]
-    environment:
-      KC_HOSTNAME: http://localhost:8180
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
-      KC_HEALTH_ENABLED: "true"
-      JAVA_OPTS_KC_HEAP: -Xms128m -Xmx512m
-    volumes: ["./.secrets/keycloak:/opt/keycloak/data/import:ro"]
-    ports: ["127.0.0.1:8180:8080"]
-    mem_limit: 1g
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q UP <&3"]
-      interval: 5s
-      retries: 60
-      start_period: 30s
-  # Web page, sign-in and flight API (scripts/serve_bi_demo.py). Rebuilds the page from the v3 source on every start.
-  bi-web:
+  # Backend: Google sign-in (OIDC), the role-scoped flight API, signed Metabase links, and the
+  # React client built into the image. Fill in .secrets/oidc.env and .secrets/role-assignments.json.
+  backend:
     build:
       context: .
-      dockerfile_inline: |
-        FROM python:3.13-slim
-        RUN pip install --no-cache-dir trino==0.340.0 "pyjwt[crypto]==2.10.1"
-        WORKDIR /app
+      dockerfile: backend/Dockerfile
+      target: runtime
+    image: qar-backend:local
     depends_on:
       trino: {condition: service_healthy}
-      keycloak: {condition: service_healthy}
-    command: ["sh", "-c", "python scripts/build_bi_page.py && exec python -u scripts/serve_bi_demo.py"]
+    env_file: [.secrets/oidc.env]
     environment:
+      PUBLIC_URL: http://localhost:8766
+      # A sign-in started from the Vite dev server (client: npm run dev) may return there.
+      DEV_ORIGINS: http://localhost:5173
       TRINO_HOST: trino
       TRINO_PORT: "8443"
-      OIDC_DISCOVERY_URL: http://keycloak:8080/realms/qar/.well-known/openid-configuration
-      BI_WEB_BIND: 0.0.0.0
-    volumes:
-      - ./scripts:/app/scripts:ro
-      - ./bi/web:/app/bi/web
-      - ./.secrets:/app/.secrets:ro
+    # Read-only: Trino logins and certificate, the Metabase embedding secret, role assignments.
+    volumes: ["./.secrets:/run/qar-secrets:ro"]
     ports: ["127.0.0.1:8766:8766"]
-    mem_limit: 128m
+    mem_limit: 256m
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8766/api/bi/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/api/bi/health')"]
       interval: 5s
       retries: 12
+      start_period: 5s
 volumes:
   rustfs_data:
   catalog_data:

@@ -1,0 +1,17 @@
+{
+  "safety": {
+    "label": "Safety",
+    "trino_user": "safety_analyst",
+    "scope": "All flights · recording and source file masked"
+  },
+  "operations": {
+    "label": "Operations",
+    "trino_user": "operations_analyst",
+    "scope": "Flights to or from VTBS · tail masked · touchdown g hidden"
+  },
+  "engineering": {
+    "label": "Engineering",
+    "trino_user": "engineering_analyst",
+    "scope": "Aircraft HS-THJ only · flight number and route masked"
+  }
+}

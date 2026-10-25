@@ -1,18 +1,30 @@
-"""Create the SSO BI demo's local secrets. Reruns keep existing values.
+"""Create the BI stack's local secrets. Reruns keep existing values.
 
 Writes only under .secrets/ (git-ignored); standard library only:
 - trino-users.json + trino/password.db  Trino login per user (PBKDF2 file authenticator)
-- trino.env / keycloak.env              values docker compose passes to Trino and Keycloak
-- oidc-client.json                      the web backend's Keycloak client
-- demo-logins.json + keycloak/qar-realm.json  demo users, roles and the realm Keycloak imports
+- trino.env                             values docker compose passes to Trino
+- oidc.env                              the backend's OIDC client (Google); template only, you fill it in
+- role-assignments.json                 signed-in email -> role; template only, you fill it in
 """
 import hashlib
 import json
 import secrets
 
-from bi_demo_settings import DEMO_USERS, ROLES, SECRETS, TRINO_USERS, WEB_URL, write_json
+from bi_demo_settings import SECRETS, TRINO_USERS, write_json
 
 PBKDF2_ITERATIONS = 100_000
+
+OIDC_TEMPLATE = """\
+# Google OAuth client for the backend (Google Cloud console > Google Auth Platform > Clients,
+# type "Web application", authorized redirect URI http://localhost:8766/callback).
+OIDC_CLIENT_ID=
+OIDC_CLIENT_SECRET=
+# Optional: only accept accounts from this Google Workspace domain (the hd claim).
+ALLOWED_DOMAIN=
+# Another OIDC provider: set its issuer. Entra ID and Keycloak send roles in the token, so use ROLES_FROM=claim.
+# OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+# ROLES_FROM=claim
+"""
 
 
 def kept(name, make):
@@ -44,49 +56,23 @@ def pbkdf2_line(user, password):
     return f"{user}:{PBKDF2_ITERATIONS}:{salt.hex()}:{digest.hex()}"
 
 
-def realm(client, logins):
-    return {
-        "realm": "qar", "enabled": True, "sslRequired": "external",
-        "roles": {"realm": [{"name": role, "description": info["scope"]} for role, info in ROLES.items()]},
-        "clients": [{
-            "clientId": client["client_id"], "secret": client["client_secret"], "enabled": True,
-            "protocol": "openid-connect", "publicClient": False, "standardFlowEnabled": True,
-            "directAccessGrantsEnabled": False, "implicitFlowEnabled": False,
-            "redirectUris": [WEB_URL + "/callback"], "webOrigins": [],
-            "attributes": {"pkce.code.challenge.method": "S256", "post.logout.redirect.uris": WEB_URL + "/"},
-            # Same claim name Entra ID uses for app roles, so the backend reads both the same way.
-            "protocolMappers": [{
-                "name": "realm roles", "protocol": "openid-connect",
-                "protocolMapper": "oidc-usermodel-realm-role-mapper",
-                "config": {"claim.name": "roles", "multivalued": "true", "jsonType.label": "String",
-                           "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true"}}],
-        }],
-        "users": [{
-            "username": username, "enabled": True, "emailVerified": True, "email": f"{username}@qar.local",
-            "firstName": username.split(".")[0].title(), "lastName": "Demo",
-            "credentials": [{"type": "password", "value": login["password"], "temporary": False}],
-            "realmRoles": [login["role"]] if login["role"] else [],
-        } for username, login in logins.items()],
-    }
-
-
 def main():
     trino_users = kept("trino-users.json", lambda: {user: token() for user in TRINO_USERS})
     write_text(SECRETS / "trino/password.db",
                "\n".join(pbkdf2_line(user, trino_users[user]) for user in TRINO_USERS) + "\n")
     service = kept("service-secrets.json", lambda: {
-        "TRINO_SHARED_SECRET": secrets.token_hex(32), "TRINO_KEYSTORE_PASSWORD": token(),
-        "KC_BOOTSTRAP_ADMIN_PASSWORD": token()})
+        "TRINO_SHARED_SECRET": secrets.token_hex(32), "TRINO_KEYSTORE_PASSWORD": token()})
     write_text(SECRETS / "trino.env", f"TRINO_SHARED_SECRET={service['TRINO_SHARED_SECRET']}\n"
                                       f"TRINO_KEYSTORE_PASSWORD={service['TRINO_KEYSTORE_PASSWORD']}\n")
-    write_text(SECRETS / "keycloak.env", "KC_BOOTSTRAP_ADMIN_USERNAME=admin\n"
-                                         f"KC_BOOTSTRAP_ADMIN_PASSWORD={service['KC_BOOTSTRAP_ADMIN_PASSWORD']}\n")
-    client = kept("oidc-client.json", lambda: {"client_id": "qar-web", "client_secret": secrets.token_hex(32)})
-    logins = kept("demo-logins.json", lambda: {name: {"password": token(), "role": role}
-                                               for name, role in DEMO_USERS.items()})
-    write_json(SECRETS / "keycloak/qar-realm.json", realm(client, logins))
+    # Templates the person running the stack completes; never overwritten once they exist.
+    if not (SECRETS / "oidc.env").exists():
+        write_text(SECRETS / "oidc.env", OIDC_TEMPLATE)
+    if not (SECRETS / "role-assignments.json").exists():
+        write_json(SECRETS / "role-assignments.json", {})
     (SECRETS / "trino-public").mkdir(exist_ok=True)
-    print("Secrets ready in .secrets/ (demo logins: .secrets/demo-logins.json)")
+    configured = "OIDC_CLIENT_ID=\n" not in (SECRETS / "oidc.env").read_text(encoding="utf-8")
+    print("Secrets ready in .secrets/" + ("" if configured else
+          " · sign-in not configured yet: fill in .secrets/oidc.env and .secrets/role-assignments.json"))
 
 
 if __name__ == "__main__":

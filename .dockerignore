@@ -1,0 +1,8 @@
+# The backend image needs only these; everything else (decoded data, .secrets, pipeline) stays out of the build context.
+*
+!backend/
+!client/
+!bi/roles.json
+client/node_modules
+client/dist
+**/__pycache__

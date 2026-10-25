@@ -31,10 +31,12 @@ decoded/
 # Runtime logs
 *.log
 
-# Local BI credentials and embedding keys
+# Local BI credentials and embedding keys, and any copy or archive of them (.secrets.zip, …)
 .secrets/
+.secrets.*
 
-# Rebuilt by scripts/build_bi_page.py from the bundled prototype
-bi/web/qar-flight-analytics-capstone-metabase.html
+# Web client dependencies and build output
+node_modules/
+client/dist/
 
 # Keep results/ versionable for reviewed experiment evidence.

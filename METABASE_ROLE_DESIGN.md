@@ -1,13 +1,13 @@
 # สรุปแนวคิด: Login + Dashboard แยกตาม role
 
-สถานะ: ทำแล้วใน BI stack (`docker-compose.bi-local.yaml`): login ผ่าน Keycloak, บัตรตาม role 3 ใบ,
+สถานะ: ทำแล้วใน app stack (`docker-compose.app.yaml`): login ด้วย Google ผ่าน backend (`backend/`), บัตรตาม role 3 ใบ,
 dashboard ต่อ role และ Trino แบบ HTTPS + password วิธีเปิดและตรวจอยู่ใน `bi/README.md`
 `docker-compose.yaml` หลัก (pipeline Dagster) ยังไม่เปลี่ยน
 
 ## 1. ภาพรวม
 
 ```
-ผู้ใช้ ──login──> IdP (Entra ID ของ TG / Keycloak ตอน dev)
+ผู้ใช้ ──login──> IdP (Entra ID ของ TG / Google ตอนเดโม)
    │                 │ JWT ใบที่ 1: "คนนี้คือ somchai, role = operations"
    ▼                 ▼
 เว็บเรา (backend) ── ดูตาราง role -> dashboard ── เซ็น JWT ใบที่ 2: "เปิด dashboard 12"
@@ -63,7 +63,8 @@ Metabase ไม่ได้ส่งชื่อคนดูไปให้ Trin
   - `issuer` เป็น URL ของ Entra tenant ของ TG
   - `redirect_uri` เป็น URL ของเว็บเราที่ให้ส่งผู้ใช้กลับมา
 - ขั้นตอนตอนใช้งาน: กด login บนเว็บเรา → ไปหน้า login ของ Microsoft (password และ MFA อยู่ที่นั่น) → ได้ JWT ใบที่ 1 กลับมา
-- ตอนพัฒนาใช้ **Keycloak** (open source ที่ Red Hat ดูแล รันใน docker ได้) แทน Entra ไปก่อน ตอนส่งมอบเปลี่ยนแค่ config
+- ตอนเดโมใช้ **บัญชี Google** แทน Entra ไปก่อน Google ไม่ส่ง role มา backend จึงจับคู่ email ที่ยืนยันแล้วกับ role
+  ใน `.secrets/role-assignments.json` ตอนส่งมอบเปลี่ยนเป็น Entra ID แค่ config (`OIDC_ISSUER`, `ROLES_FROM=claim`)
 - ข้อดีของการรันใน docker: สั่ง `docker compose up` ครั้งเดียวก็ได้ ทุกเครื่องได้เวอร์ชันเดียวกัน ส่งมอบง่าย
 
 ## 5. JWT มี 2 ใบ อย่าสับสน
@@ -74,7 +75,7 @@ Metabase ไม่ได้ส่งชื่อคนดูไปให้ Trin
 
 | | JWT ใบที่ 1 (login) | JWT ใบที่ 2 (embed) |
 | --- | --- | --- |
-| ใครสร้าง/เซ็น | IdP (Microsoft / Keycloak) | backend ของเรา |
+| ใครสร้าง/เซ็น | IdP (Microsoft / Google) | backend ของเรา |
 | ข้างในมีอะไร | ชื่อ, email, `roles: ["operations"]` | `{"resource": {"dashboard": 12}, "exp": ...}` |
 | ส่งให้ใคร | เว็บเรา | Metabase |
 | ตรวจลายเซ็นด้วย | public key ที่ IdP เปิดให้ดาวน์โหลด | embedding secret key ของ Metabase (ใช้ร่วมกันระหว่าง backend กับ Metabase) |
@@ -92,7 +93,7 @@ Microsoft เกี่ยวข้องแค่ใบที่ 1 ส่วน�
 7. กราฟใน dashboard 12 ใช้บัตร Trino-Ops ดังนั้น OPA จะกรองข้อมูลของ Operations ให้
 
 **Metabase ตรวจ JWT ใบที่ 2 ยังไง:** ใช้ HS256 คือ backend เอา header และ payload มาคำนวณ HMAC-SHA256 ด้วย secret
-ได้ออกมาเป็น signature (ดู `scripts/serve_bi_demo.py` บรรทัด 43–47) Metabase ซึ่งมี secret เดียวกันจะคำนวณซ้ำแล้วเทียบกับ signature
+ได้ออกมาเป็น signature (ดู `dashboard_link()` ใน `backend/app/data.py`) Metabase ซึ่งมี secret เดียวกันจะคำนวณซ้ำแล้วเทียบกับ signature
 ถ้าตรงกันก็เชื่อ วิธีนี้ไม่ใช่การเข้ารหัส ข้างใน payload ทุกคนอ่านได้ แต่ถ้าไม่มี secret จะแก้ payload หรือปลอม signature ไม่ได้
 
 **role ไปถึง Trino ทางไหน:** role ไม่ได้อยู่ใน JWT ใบที่ 2 แต่ส่งผ่านลำดับนี้
@@ -102,8 +103,8 @@ driver ของ Metabase ส่งชื่อนี้ให้ Trino ทุ�
 setup เช็คด้วย `SELECT current_user` ผ่านแต่ละ connection (ฟังก์ชัน `verify()`)
 
 **ทำไมต้องมี backend:** secret key ใช้เซ็น JWT ใบที่ 2 ถ้าใส่ไว้ใน html ใครก็เปิดดู source แล้วเอาไปเซ็นเปิด
-dashboard ของ role อื่นได้ `scripts/serve_bi_demo.py` ตรวจ JWT ใบที่ 1 (`finish_login()`), เก็บ role ใน session
-แล้วเลือก dashboard ของ role ก่อนเซ็น JWT ใบที่ 2 (`embed_url()` ใน `scripts/bi_demo_settings.py`)
+dashboard ของ role อื่นได้ backend ตรวจ JWT ใบที่ 1 (`sign_in()` ใน `backend/app/auth.py`), เก็บ role ใน session
+แล้วเลือก dashboard ของ role ก่อนเซ็น JWT ใบที่ 2 (`dashboard_link()` ใน `backend/app/data.py`)
 
 ## 7. Dashboard ต่อ role
 
@@ -120,7 +121,7 @@ dashboard ของ role อื่นได้ `scripts/serve_bi_demo.py` ตร
 
 - **ต้นฉบับใน git:** `bi/dashboard.json` (รายการกราฟและตำแหน่ง) กับ `bi/queries/*.sql` (SQL ของแต่ละกราฟ)
   `scripts/setup_bi_demo.py` อ่านสองที่นี้แล้วสร้างกราฟผ่าน Metabase API
-- **ตัวที่ใช้งานจริง:** เก็บใน database ภายในของ Metabase (H2 บน volume `metabase_data` ตาม `docker-compose.bi-local.yaml`)
+- **ตัวที่ใช้งานจริง:** เก็บใน database ภายในของ Metabase (H2 บน volume `metabase_data` ตาม `docker-compose.app.yaml`)
 - ถ้าแก้กราฟในหน้า Metabase แล้วรัน `setup_bi_demo.py` ซ้ำ การแก้จะถูกทับ เพราะ script `PUT` กราฟกับ layout ใหม่จาก json
 - script วนสร้าง connection และ dashboard ทีละ role จาก json ชุดเดียวกัน ไม่ต้องกด Duplicate เอง
   card ไหนไม่เหมาะกับ role ไหน กำหนดด้วย `"roles"` / `"layout"` ใน json (ดู `bi/README.md`)
@@ -160,8 +161,8 @@ dashboard ของ role อื่นได้ `scripts/serve_bi_demo.py` ตร
 
 | ส่วน | ใช้อะไร |
 | --- | --- |
-| Login | OIDC: Keycloak ตอน dev และ Entra ID ของ TG ตอนใช้จริง |
-| Backend | `scripts/serve_bi_demo.py` (Python + PyJWT) ตรวจ JWT ใบที่ 1 และเซ็น JWT ใบที่ 2 ตอนส่งมอบควรย้ายไป FastAPI/Flask หลัง HTTPS |
+| Login | OIDC: Google ตอนเดโม (role จาก email) และ Entra ID ของ TG ตอนใช้จริง (role จาก app roles) |
+| Backend | `backend/` (FastAPI + PyJWT ใน container ของตัวเอง) ตรวจ JWT ใบที่ 1 และเซ็น JWT ใบที่ 2 ตอนส่งมอบต้องอยู่หลัง HTTPS |
 | Dashboard | Metabase OSS ต่อ Trino ด้วย driver Starburst (driver ทางการของ Metabase) ใช้ static embedding |
 | SQL engine | Trino ที่เปิด HTTPS และ password |
 | สิทธิ์ข้อมูล | OPA และ `opa/trino.rego` เดิม |
@@ -176,8 +177,8 @@ dashboard ของ role อื่นได้ `scripts/serve_bi_demo.py` ตร
 
 ทำแล้วทั้ง 4 ข้อ ตรวจได้ด้วย `powershell -File scripts/start_bi_demo.ps1 -CheckOnly`
 1. ~~`setup_bi_demo.py` สร้าง connection 3 ใบ และ dashboard 3 อัน (1 ต่อ role) จากตาราง Gold~~
-2. ~~Keycloak ใน compose และ login ในหน้าเว็บ~~
-3. ~~`serve_bi_demo.py` ตรวจ JWT ใบที่ 1 อ่าน role แล้วเลือก dashboard id ก่อนเซ็น JWT ใบที่ 2~~
+2. ~~login ในหน้าเว็บ (ตอนแรก Keycloak ปัจจุบันเป็น Google)~~
+3. ~~backend ตรวจ JWT ใบที่ 1 อ่าน role แล้วเลือก dashboard id ก่อนเซ็น JWT ใบที่ 2~~
 4. ~~Trino แบบ HTTPS และ password~~
 
 ที่เหลือก่อนส่งมอบอยู่ท้าย `bi/README.md`

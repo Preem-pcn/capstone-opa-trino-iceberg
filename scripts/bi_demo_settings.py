@@ -1,4 +1,4 @@
-"""Roles, URLs and local secrets shared by the SSO BI demo scripts.
+"""Roles, URLs and local secrets shared by the BI stack scripts.
 
 Secrets live in git-ignored .secrets/ files created by init_bi_secrets.py.
 Standard library only, so host scripts can import it without extra packages.
@@ -16,21 +16,11 @@ SECRETS = ROOT / ".secrets"
 TRINO_CERT = SECRETS / "trino-public/trino.crt"
 
 WEB_URL = os.environ.get("BI_PUBLIC_URL", "http://localhost:8766")
-OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "http://localhost:8180/realms/qar")
 
-# Role claim from the identity provider -> Trino user evaluated by opa/trino.rego.
-ROLES = {
-    "safety": {"label": "Safety", "trino_user": "safety_analyst",
-               "scope": "All flights · recording and source file masked"},
-    "operations": {"label": "Operations", "trino_user": "operations_analyst",
-                   "scope": "Flights to or from VTBS · tail masked · touchdown g hidden"},
-    "engineering": {"label": "Engineering", "trino_user": "engineering_analyst",
-                    "scope": "Aircraft HS-THJ only · flight number and route masked"},
-}
+# Role -> Trino user evaluated by opa/trino.rego. One file, shared with the backend container.
+ROLES = json.loads((ROOT / "bi/roles.json").read_text(encoding="utf-8"))
 # Trino logins: the loader, one per role, and a user OPA always denies.
 TRINO_USERS = ["dagster", "blocked_user", *(role["trino_user"] for role in ROLES.values())]
-# Keycloak demo logins. norole.demo shows that signing in without a role grants no data.
-DEMO_USERS = {"safety.demo": "safety", "ops.demo": "operations", "eng.demo": "engineering", "norole.demo": None}
 
 
 def read_secret(name):

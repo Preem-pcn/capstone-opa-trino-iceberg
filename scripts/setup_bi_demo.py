@@ -97,7 +97,7 @@ def dataset(database_id, card):
 
 def connection(role):
     user = ROLES[role]["trino_user"]
-    # The container trusts Trino's self-signed certificate mounted at /tls (see docker-compose.bi-local.yaml).
+    # The container trusts Trino's self-signed certificate mounted at /tls (see docker-compose.app.yaml).
     return {"name": f"QAR Gold · {ROLES[role]['label']} ({user})", "engine": "starburst", "is_full_sync": False,
             "details": {"host": "trino", "port": 8443, "catalog": "iceberg", "schema": "gold",
                         "user": user, "password": read_secret("trino-users.json")[user], "ssl": True,

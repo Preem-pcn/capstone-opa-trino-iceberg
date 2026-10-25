@@ -1,13 +1,14 @@
 # Gold Reports จาก capstone-opa-trino-iceberg
 
 เดโมนี้ใช้ข้อมูล `decoded/` และ Gold SQL ของ checkout นี้โดยตรง
-เปิด stack แยกด้วย `docker-compose.bi-local.yaml` (ไม่ merge กับ compose เดิม)
-ชื่อ project คือ `qar-capstone-sso` ไม่ใช้ container, catalog หรือ object storage ของ
+เปิด stack ด้วย `docker-compose.app.yaml` (แยกจาก `docker-compose.yaml` ของ pipeline)
+ชื่อ project คือ `qar-capstone-sso` (ชื่อเดิม จึงใช้ volumes เดิมของ stack นี้ต่อได้) ไม่ใช้ container, catalog หรือ object storage ของ
 `C:\QAR\trino-iceberg-poc` และไม่แก้ policy OPA เดิม
 stack รุ่นก่อนที่ไม่มี login (project `qar-capstone-bi`) และ volumes ของมันไม่ถูกแตะ
 ครั้งแรกที่เปิด stack นี้จะได้ volumes ใหม่ startup script โหลดข้อมูลตัวอย่างให้เอง
 
-ผู้ใช้ login ผ่าน Keycloak (OIDC) แล้วเห็น dashboard ของ role ตัวเอง
+ผู้ใช้ login ด้วยบัญชี Google (OIDC) ผ่าน backend (`backend/`, FastAPI) แล้วเห็น dashboard ของ role ตัวเอง
+Google ไม่ส่ง role มา backend จึงจับคู่ email ที่ยืนยันแล้วกับ role จาก `.secrets/role-assignments.json`
 แต่ละ role มี Trino login (HTTPS + password) ของตัวเอง OPA จึงกรองทุกกราฟตาม role
 แนวคิดทั้งหมดอยู่ใน `METABASE_ROLE_DESIGN.md` ที่ root ของ repo
 
@@ -23,22 +24,48 @@ cd C:\QAR\capstone-opa-trino-iceberg
 powershell -File scripts/start_bi_demo.ps1
 ```
 
-เปิดเว็บ **http://localhost:8766/** ระบบจะพาไปหน้า login ของ Keycloak
+บน macOS/Linux ใช้ `scripts/start_bi_demo.sh` (ขั้นตอนเดียวกัน) กำหนด Python ที่มี dependencies ด้วย `PYTHON`:
+
+```sh
+PYTHON="conda run -n qar python" scripts/start_bi_demo.sh
+PYTHON="conda run -n qar python" scripts/start_bi_demo.sh --check-only
+```
+
+### ตั้งค่า login ด้วย Google (ครั้งแรก)
+
+1. เปิด https://console.cloud.google.com/ สร้างหรือเลือก project
+2. Google Auth Platform → Branding: ตั้งชื่อแอปและ support email
+3. Audience: เลือก External ปล่อยไว้ที่ Testing แล้วเพิ่ม test users คือบัญชี Google ที่จะใช้ login
+4. Clients → Create client → ชนิด Web application
+   ใส่ Authorized redirect URI เป็น `http://localhost:8766/callback`
+5. ใส่ client ID และ secret ใน `.secrets/oidc.env` (`init_bi_secrets.py` สร้าง template ไว้ให้):
+   ```
+   OIDC_CLIENT_ID=xxxx.apps.googleusercontent.com
+   OIDC_CLIENT_SECRET=xxxx
+   ```
+6. กำหนด role ให้แต่ละ email ใน `.secrets/role-assignments.json` (คนละหนึ่ง role;
+   email ที่ไม่อยู่ในไฟล์ login ได้แต่ไม่เห็นข้อมูล):
+   ```json
+   {"somchai@gmail.com": "safety", "nok@gmail.com": "operations", "pim@gmail.com": "engineering"}
+   ```
+7. รัน `docker compose -f docker-compose.app.yaml up -d backend` ให้ backend อ่าน `oidc.env` ใหม่
+   ส่วน `role-assignments.json` ถูกอ่านใหม่ทุกครั้งที่มีคน login จึงไม่ต้อง restart
+
+ถ้าใช้ Google Workspace และต้องการรับเฉพาะบัญชีขององค์กร ให้ตั้ง `ALLOWED_DOMAIN` ใน `oidc.env`
+
+เปิดเว็บ **http://localhost:8766/** ระบบจะพาไปหน้าเลือกบัญชี Google
 พอร์ต 8765 คือเดโมเก่าจากอีก repo ไม่ใช่หน้าใหม่นี้
 
-| ผู้ใช้เดโม | Role | เห็นอะไร |
-| --- | --- | --- |
-| `safety.demo` | safety | ทุกเที่ยวบิน, recording/source file ถูก mask |
-| `ops.demo` | operations | เฉพาะเที่ยวบินเข้า/ออก VTBS, tail ถูก mask, ไม่มี touchdown g |
-| `eng.demo` | engineering | เฉพาะเครื่อง HS-THJ, flight number/route ถูก mask |
-| `norole.demo` | ไม่มี | login ได้ แต่ไม่มี dashboard และไม่มีข้อมูล |
-
-password สุ่มตอนสร้าง อยู่ใน `.secrets/demo-logins.json`
+| Role | เห็นอะไร |
+| --- | --- |
+| safety | ทุกเที่ยวบิน, recording/source file ถูก mask |
+| operations | เฉพาะเที่ยวบินเข้า/ออก VTBS, tail ถูก mask, ไม่มี touchdown g |
+| engineering | เฉพาะเครื่อง HS-THJ, flight number/route ถูก mask |
+| ไม่มี role หรือมีหลาย role | login ได้ แต่ไม่มี dashboard และไม่มีข้อมูล |
 
 | Service | URL / port ฝั่งเครื่อง |
 | --- | --- |
-| เว็บ QAR | http://localhost:8766/ |
-| Keycloak (login, admin console) | http://localhost:8180 |
+| เว็บ QAR (backend) | http://localhost:8766/ |
 | Metabase | http://localhost:3002 |
 | Trino (HTTPS + password เท่านั้น) | https://localhost:8443 |
 | Iceberg REST | http://localhost:9181 |
@@ -53,16 +80,14 @@ secrets ทั้งหมดอยู่ใน `.secrets/` ที่ Git ignore
 | --- | --- |
 | `trino-users.json`, `trino/password.db` | password ของ Trino ต่อ user (`password.db` เป็น PBKDF2 hash ที่ Trino อ่าน) |
 | `trino/keystore.jks`, `trino-public/trino.crt` | TLS certificate ของ Trino (self-signed); client trust ไฟล์ `.crt` |
-| `trino.env`, `keycloak.env`, `service-secrets.json` | shared secret ของ Trino, password ของ keystore และ Keycloak admin |
-| `oidc-client.json` | client id/secret ที่ backend ใช้คุยกับ Keycloak |
-| `demo-logins.json`, `keycloak/qar-realm.json` | ผู้ใช้เดโมและ realm ที่ Keycloak import ทุกครั้งที่ start |
+| `trino.env`, `service-secrets.json` | shared secret ของ Trino และ password ของ keystore |
+| `oidc.env` | client ID/secret ของ Google ที่ backend ใช้ (ใส่เอง) |
+| `role-assignments.json` | email → role (ใส่เอง) |
 | `metabase-demo.json`, `metabase-sso-state.json`, `metabase-embed.json` | Metabase admin, id ของ objects ที่สร้าง และ embedding secret |
 
 `scripts/init_bi_secrets.py` สร้างไฟล์เหล่านี้ (startup script เรียกให้) รันซ้ำได้โดยไม่เปลี่ยนค่าเดิม
-Keycloak admin console ใช้ user `admin` และ password ใน `.secrets/keycloak.env`
-Keycloak รันแบบ dev mode โดยไม่มี volume: realm ถูก import ใหม่จากไฟล์เมื่อสร้าง container ใหม่
-ผู้ใช้ที่เพิ่มผ่าน console จะหายเมื่อสร้าง container ใหม่ ให้เพิ่มใน `DEMO_USERS` ของ `scripts/bi_demo_settings.py` แทน
-แล้วรัน `python scripts/init_bi_secrets.py` และ `docker compose -f docker-compose.bi-local.yaml up -d --force-recreate keycloak`
+`oidc.env` และ `role-assignments.json` ถูกสร้างเป็น template ครั้งแรกเท่านั้น และไม่ถูกเขียนทับ
+backend mount `.secrets/` แบบ read-only จึงไม่มี secret อยู่ใน image
 
 ## ข้อมูลที่ใช้
 
@@ -187,20 +212,20 @@ reference ของ flight ในรายงานเป็น SHA-256 prefix 1
 ไม่ใช่การรับรอง anonymization หรือ policy masking ของ safety role
 เวลาใน Metabase ตั้งเป็น UTC
 
-เก็บสำเนาต้นแบบ `_3` ไว้ใน `bi/web/qar-flight-analytics_3.html` เพื่อให้ clone repo แล้ว build ได้
-โดยไม่ต้องมีโฟลเดอร์ visualization ภายนอก ไฟล์ต้นฉบับในเครื่องยังอยู่เหมือนเดิม
-`scripts/build_bi_page.py` สร้างเว็บที่ `bi/web/qar-flight-analytics-capstone-metabase.html`
-ไฟล์ที่สร้างนี้ถูก Git ignore และ startup script จะ build ให้อัตโนมัติ
+หน้าเว็บคือ React client ใน `client/` ซึ่งถูก build อยู่ใน image ของ backend (`backend/Dockerfile`) จึงไม่ต้องมี Node บนเครื่อง
+backend ส่งไฟล์ของ client และส่ง `index.html` ให้ทุก route ของ client (`/flights`, `/reports`, ...)
 Gold Reports แสดง dashboard จริง และ Flight Explorer อ่านรายการจาก Silver ผ่าน Trino
 พร้อมเปิดรายละเอียดจาก Silver และ metrics/phases/events จาก Gold ตาม flight ID ที่เลือก
 ส่วน Cockpit และ SQL Workspace ยังใช้ข้อมูล prototype เดิม
-แถบบนแสดงผู้ใช้ที่ login และ role พร้อมปุ่ม Sign out (แทนตัวเลือก Demo identity เดิม)
+แถบบนแสดงผู้ใช้ที่ login และ role พร้อมปุ่ม Sign out
 หน้า prototype (SQL Workspace, OPA fixtures) เริ่มจาก Trino user ของ role ที่ login
 ปุ่มในหน้า OPA fixtures ยังสลับ identity ได้เพราะใช้ข้อมูล mock ไม่ได้ query Trino
+หลังแก้ client หรือ backend ให้ build ใหม่ด้วย `docker compose -f docker-compose.app.yaml up -d --build backend` แล้ว reload
+endpoint และโครงสร้างของ client อยู่ใน `client/README.md`
 
 ### Flight Explorer
 
-เปิด **http://localhost:8766/#explorer** เพื่อดูข้อมูล `iceberg.silver.flights`
+เปิด **http://localhost:8766/flights** เพื่อดูข้อมูล `iceberg.silver.flights`
 รวมเที่ยวบินจริงและเที่ยวบินจำลองที่โหลดเข้ามาแล้ว (ชุดเดโมปัจจุบัน 108 เที่ยวบิน:
 ข้อมูลจริง 3 และจำลอง 105) มีป้าย Recorded / Synthetic demo ให้แยกแหล่งข้อมูล
 เลขเที่ยวบินแสดงตามที่เก็บใน Silver เช่น `TG0000` ของ decoded บาง recording
@@ -218,33 +243,38 @@ API อ่าน metadata สูงสุด 1,000 เที่ยวบิน�
 ถ้า OPA ปฏิเสธบาง column ของ summary (เช่น `touchdown_peak_g` ของ Operations) API อ่านรายชื่อ column
 ที่ role นั้นเห็นจาก `information_schema.columns` แล้วเลือกเฉพาะ column เหล่านั้น หน้าเว็บแสดงเป็น `—`
 เวลาแสดงเป็น UTC
-เว็บ server รันเป็น service `bi-web` ใน `docker-compose.bi-local.yaml` (build หน้าเว็บใหม่ทุกครั้งที่ start)
-หลังแก้ไฟล์ใน `scripts/` หรือ `bi/web/qar-flight-analytics_3.html` ให้รัน
-`docker compose -f docker-compose.bi-local.yaml restart bi-web` แล้ว reload หน้าเว็บ
 
-### Login และ backend (`serve_bi_demo.py`)
+### Login และ backend (`backend/`)
+
+FastAPI + uvicorn ใน container ของตัวเอง (`backend/Dockerfile`, service `backend` ใน `docker-compose.app.yaml`)
+รันเป็น user ที่ไม่ใช่ root
 
 | Endpoint | ทำอะไร |
 | --- | --- |
-| `/login` | เริ่ม OIDC authorization code flow + PKCE แล้ว redirect ไป Keycloak |
-| `/callback` | รับ code, แลกเป็น ID token ทาง back-channel, ตรวจลายเซ็น/issuer/audience/nonce แล้วสร้าง session |
-| `/logout` | ลบ session ของเว็บ และจบ session ที่ Keycloak (login ครั้งต่อไปต้องใส่ password ใหม่) |
+| `/login` | เริ่ม OIDC authorization code flow + PKCE แล้ว redirect ไปหน้าเลือกบัญชีของ Google |
+| `/callback` | รับ code, แลกเป็น ID token ทาง back-channel, ตรวจลายเซ็น/issuer/audience/nonce และ email ที่ยืนยันแล้ว แล้วสร้าง session |
+| `/logout` | ลบ session ของเว็บ (Google ไม่มี endpoint สำหรับ logout จึงไม่ได้ออกจาก Google; login ครั้งถัดไปจะให้เลือกบัญชี) |
 | `/api/me` | ผู้ใช้, role, Trino user ของ session นี้ |
 | `/api/bi/embed`, `/metabase` | เซ็น JWT อายุ 10 นาทีสำหรับ dashboard ของ role นี้เท่านั้น |
 | `/api/flights`, `/api/flights/detail` | Flight API ด้วย Trino user ของ role นี้ |
 
 - ยังไม่ login: หน้าเว็บ redirect ไป `/login` ส่วน API ตอบ 401 (หน้าเว็บพาไป login ให้)
-- login แล้วแต่ไม่มี role หรือมีหลาย role: API ข้อมูลตอบ 403 และหน้า Gold Reports แสดงข้อความ
-- role อ่านจาก claim `roles` ใน ID token ซึ่งเป็นชื่อเดียวกับ app roles ของ Entra ID
-- session เก็บใน memory ของ server, cookie เป็น HttpOnly + SameSite=Lax, อายุ 8 ชั่วโมง restart server แล้วต้อง login ใหม่
+- login แล้วแต่ไม่มี role หรือมีหลาย role: API ข้อมูลตอบ 403 และหน้าเว็บแสดงข้อความ
+- role มาจาก `.secrets/role-assignments.json` ตาม email (`ROLES_FROM=assignments`, ค่าเริ่มต้น)
+  หรือจาก claim `roles` ใน ID token (`ROLES_FROM=claim` สำหรับ app roles ของ Entra ID)
+- session เก็บใน memory ของ backend (worker เดียว) cookie เป็น HttpOnly + SameSite=Lax
+  (และ Secure เมื่อ `PUBLIC_URL` เป็น https) อายุ 8 ชั่วโมง restart แล้วต้อง login ใหม่
+- audit log เป็น JSON บรรทัดละเหตุการณ์ใน `docker compose -f docker-compose.app.yaml logs backend`
+  (login, role, dashboard, flight API) และทุก query ที่ส่งไป Trino มี client tag `person:<email>`
 - เว็บต่ออายุ embed token ทุก 8 นาที มีปุ่ม refresh และเปิด dashboard แยกแท็บ
 - ใช้ signed/static embedding ที่ Metabase OSS รองรับ ไม่มี public link
+- test ของ backend ใช้ OIDC provider จำลอง รันด้วย `docker build -f backend/Dockerfile --target test .`
 
 เปลี่ยนไปใช้ Entra ID (หรือ OIDC provider อื่น) ไม่ต้องแก้ code:
 1. ให้ IT ลงทะเบียนแอป redirect URI `<เว็บ>/callback` และสร้าง app roles `safety`, `operations`, `engineering`
-2. ใส่ client id/secret ใน `.secrets/oidc-client.json`
-3. ตั้ง `OIDC_ISSUER` (เช่น `https://login.microsoftonline.com/<tenant-id>/v2.0`) และ `BI_PUBLIC_URL` ให้ service `bi-web`
-   และลบ `OIDC_DISCOVERY_URL` (ค่านั้นชี้ Keycloak ใน docker network)
+2. ใน `.secrets/oidc.env` ใส่ client id/secret, `OIDC_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0`
+   และ `ROLES_FROM=claim`
+3. รัน `docker compose -f docker-compose.app.yaml up -d backend`
 
 ## ตรวจซ้ำและหยุด
 
@@ -252,30 +282,32 @@ API อ่าน metadata สูงสุด 1,000 เที่ยวบิน�
 powershell -File scripts/start_bi_demo.ps1 -CheckOnly
 ```
 
+```sh
+PYTHON="conda run -n qar python" scripts/start_bi_demo.sh --check-only
+```
+
 ตรวจจำนวนข้อมูล/quality gates/OPA denials และทุก Metabase card ของทุก role รวม filters,
-no-match case, signed metadata และการปฏิเสธ token ที่ถูกแก้
-แล้วรัน `scripts/check_sso_flow.py` ซึ่ง login ผ่านฟอร์มจริงของ Keycloak ทีละผู้ใช้เดโม และตรวจว่า
-- แต่ละ role ได้ dashboard ของตัวเอง และตัวเลขใน dashboard/Flight API ตรงกับที่ Trino ตอบให้ role นั้น
-- Operations เห็น tail เป็น REDACTED
-- `norole.demo` ได้ 403, ผู้ที่ยังไม่ login ได้ 401, sign out แล้วต้องใส่ password ใหม่
+no-match case, signed metadata และการปฏิเสธ token ที่ถูกแก้ รัน test ของ backend
+แล้วรัน `scripts/check_sso_flow.py` ซึ่งตรวจว่า
+- backend ทำงาน ส่งหน้าเว็บได้ และมี dashboard links
+- ผู้ที่ยังไม่ login ได้ 401 จาก API และถูกพาไปหน้า login
+- `/login` ส่งไป Google พร้อม callback ของเว็บนี้, PKCE และ state cookie (ข้ามถ้ายังไม่ได้ตั้ง `oidc.env`)
+- callback จาก browser ที่ไม่ได้เริ่ม login (ไม่มี state cookie) ถูกปฏิเสธ
 - Metabase ปฏิเสธ token ที่ถูกแก้เลข dashboard
 - Trino ปฏิเสธ password ผิด/ไม่มี password และ login ของ role สวมเป็น admin ไม่ได้
 
-`-NoWeb` ใช้เปิด stack และเตรียม BI โดยไม่เปิดเว็บ server
-หากจะเปิดเว็บใน terminal เองแทน container ให้ `docker compose -f docker-compose.bi-local.yaml stop bi-web` ก่อน
-แล้ว `pip install "pyjwt[crypto]"` ใช้ `python scripts/serve_bi_demo.py` และหยุดด้วย Ctrl+C
+การ login ด้วย Google จริงต้องทำเองใน browser สคริปต์ทำแทนไม่ได้
 
 หยุด containers ของเดโมนี้โดยเก็บข้อมูลไว้:
 
 ```powershell
-docker compose -f docker-compose.bi-local.yaml stop
+docker compose -f docker-compose.app.yaml stop
 ```
 
 อย่าใช้ `down -v` หากต้องการเก็บข้อมูลเดโม เพราะจะลบ volumes ของ stack นี้
-ไฟล์ compose เดิมของ repo ยังใช้ชื่อ container/port เดิม จึงให้ใช้ไฟล์ bi-local สำหรับเดโมนี้
 ก่อนเปิดให้ผู้ใช้อื่นนอกเครื่องเดโม ยังต้องทำเพิ่ม:
-- เว็บและ Keycloak ต้องอยู่หลัง HTTPS แล้วเพิ่ม flag `Secure` ให้ cookie (มี `ponytail:` comment ใน `serve_bi_demo.py`)
-- ย้ายเว็บจาก `http.server` ไปใช้ server สำหรับ production และเก็บ session นอก memory ถ้ามีหลาย instance
-- Keycloak โหมด production พร้อม database หรือใช้ Entra ID ของ TG
+- backend ต้องอยู่หลัง HTTPS: ตั้ง `PUBLIC_URL` เป็น https (cookie จะเป็น `Secure`) และเพิ่ม redirect URI นั้นใน Google
+- เก็บ session นอก memory (เช่น Redis) ถ้าจะรัน backend หลาย instance
+- Google OAuth app ยังอยู่ในโหมด Testing (ผู้ใช้ต้องอยู่ในรายชื่อ test users) ตอนใช้จริงเปลี่ยนเป็น Entra ID ของ TG (`ROLES_FROM=claim`)
 - Trino ใช้ certificate จาก CA ขององค์กรแทน self-signed และใช้ Metabase application database (เช่น Postgres) แทน H2
 - สิทธิ์ role editor ใน Metabase (กลุ่มที่แก้ได้เฉพาะ collection ของ role ตัวเอง) ยังไม่ได้ตั้ง ตอนนี้มีแต่ admin
