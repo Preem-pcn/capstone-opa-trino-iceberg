@@ -5,7 +5,9 @@ $biRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $biRoot
 try {
     if (-not $CheckOnly) {
-        & docker compose -f docker-compose.bi-local.yaml up -d --wait --wait-timeout 240
+        & python scripts/init_bi_secrets.py
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the local secrets in .secrets/.' }
+        & docker compose -f docker-compose.bi-local.yaml up -d --wait --wait-timeout 300
         if ($LASTEXITCODE -ne 0) { throw 'The isolated capstone BI stack is not ready. Check its compose logs.' }
         & python -u scripts/load_bi_samples.py
         if ($LASTEXITCODE -ne 0) { throw 'Loading or checking the decoded sample data failed.' }
@@ -17,6 +19,9 @@ try {
         & python scripts/load_bi_samples.py --check
         if ($LASTEXITCODE -ne 0) { throw 'Sample data verification failed.' }
         & python scripts/setup_bi_demo.py --check
+        if ($LASTEXITCODE -ne 0) { throw 'Metabase setup or verification failed.' }
+        & python scripts/check_sso_flow.py
+        if ($LASTEXITCODE -ne 0) { throw 'The sign-in and role check failed.' }
     }
     if ($LASTEXITCODE -ne 0) { throw 'Metabase setup or verification failed.' }
     if (-not $CheckOnly -and -not $NoWeb) {
@@ -37,8 +42,9 @@ try {
                 } catch { }
             }
         }
-        if (-not $webReady) { throw 'Could not open the capstone web demo on port 8766. Check .secrets/bi-web.err.log.' }
+        if (-not $webReady) { throw 'Could not open the capstone web demo on port 8766. Check .secrets/bi-web.err.log (running it outside Docker needs: pip install "pyjwt[crypto]").' }
         Write-Host 'Open CAPSTONE Gold Reports: http://localhost:8766/#gold'
+        Write-Host 'Sign in as ops.demo, eng.demo, safety.demo or norole.demo. Passwords: .secrets/demo-logins.json'
     }
 } finally {
     Pop-Location

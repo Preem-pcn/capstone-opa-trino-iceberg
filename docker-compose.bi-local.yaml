@@ -1,5 +1,7 @@
 # Isolated local stack for this checkout. Does not merge with docker-compose.yaml.
-name: qar-capstone-bi
+# Run scripts/init_bi_secrets.py first (start_bi_demo.ps1 does): it creates the .secrets/ files used below.
+# A separate project name keeps the older, password-less qar-capstone-bi stack and its volumes untouched.
+name: qar-capstone-sso
 services:
   rustfs:
     image: rustfs/rustfs:1.0.0-beta.8
@@ -64,17 +66,39 @@ services:
     volumes: ["./opa:/policies:ro"]
     ports: ["127.0.0.1:9282:8181"]
     mem_limit: 128m
+  # One-shot job: self-signed TLS certificate for Trino. The keystore stays private;
+  # trino-public/trino.crt is what clients trust.
+  trino-tls:
+    image: trinodb/trino:483
+    env_file: [.secrets/trino.env]
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        set -e;
+        test -f /tls/keystore.jks || keytool -genkeypair -noprompt -alias trino -keyalg RSA -keysize 2048
+        -validity 825 -dname CN=trino -ext SAN=dns:trino,dns:localhost,ip:127.0.0.1
+        -storetype JKS -keystore /tls/keystore.jks -storepass "$$TRINO_KEYSTORE_PASSWORD";
+        keytool -exportcert -rfc -alias trino -keystore /tls/keystore.jks
+        -storepass "$$TRINO_KEYSTORE_PASSWORD" -file /public/trino.crt
+    volumes:
+      - ./.secrets/trino:/tls
+      - ./.secrets/trino-public:/public
   trino:
     image: trinodb/trino:483
     depends_on:
       iceberg-rest: {condition: service_healthy}
       opa: {condition: service_started}
-    ports: ["127.0.0.1:8083:8080"]
+      trino-tls: {condition: service_completed_successfully}
+    # HTTPS only on the host; the plain HTTP port is not published.
+    ports: ["127.0.0.1:8443:8443"]
+    env_file: [.secrets/trino.env]
     volumes:
       - ./trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
       - ./trino/access-control.properties:/etc/trino/access-control.properties:ro
       - ./bi/trino/config.properties:/etc/trino/config.properties:ro
+      - ./bi/trino/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
       - ./bi/trino/jvm.config:/etc/trino/jvm.config:ro
+      - ./.secrets/trino:/etc/trino/secrets:ro
     mem_limit: 2g
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/v1/info >/dev/null"]
@@ -94,27 +118,50 @@ services:
       JAVA_OPTS: -Xmx768m
       MB_ANON_TRACKING_ENABLED: "false"
       MB_LOAD_SAMPLE_CONTENT: "false"
-    volumes: ["metabase_data:/metabase-data"]
+    volumes:
+      - metabase_data:/metabase-data
+      - ./.secrets/trino-public:/tls:ro
     mem_limit: 1536m
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:3000/api/health"]
       interval: 5s
       retries: 60
       start_period: 120s
-  # Web page + flight API (scripts/serve_bi_demo.py). Rebuilds the page from the v3 source on every start.
+  # Identity provider (OIDC). Dev mode, realm imported from .secrets/keycloak/ on every start.
+  # Browsers use localhost:8180; containers reach the same realm at keycloak:8080.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev", "--import-realm"]
+    env_file: [.secrets/keycloak.env]
+    environment:
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      JAVA_OPTS_KC_HEAP: -Xms128m -Xmx512m
+    volumes: ["./.secrets/keycloak:/opt/keycloak/data/import:ro"]
+    ports: ["127.0.0.1:8180:8080"]
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      retries: 60
+      start_period: 30s
+  # Web page, sign-in and flight API (scripts/serve_bi_demo.py). Rebuilds the page from the v3 source on every start.
   bi-web:
     build:
       context: .
       dockerfile_inline: |
         FROM python:3.13-slim
-        RUN pip install --no-cache-dir trino==0.340.0
+        RUN pip install --no-cache-dir trino==0.340.0 "pyjwt[crypto]==2.10.1"
         WORKDIR /app
     depends_on:
       trino: {condition: service_healthy}
+      keycloak: {condition: service_healthy}
     command: ["sh", "-c", "python scripts/build_bi_page.py && exec python -u scripts/serve_bi_demo.py"]
     environment:
       TRINO_HOST: trino
-      TRINO_PORT: "8080"
+      TRINO_PORT: "8443"
+      OIDC_DISCOVERY_URL: http://keycloak:8080/realms/qar/.well-known/openid-configuration
       BI_WEB_BIND: 0.0.0.0
     volumes:
       - ./scripts:/app/scripts:ro

@@ -2,14 +2,31 @@
 
 import hashlib
 from pathlib import Path
-from bi_demo_settings import get_query_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "bi/web/qar-flight-analytics_3.html"
 OUTPUT = SOURCE.with_name("qar-flight-analytics-capstone-metabase.html")
 
 GOLD = r'''
-/* Gold reports use the live, signed Metabase dashboard. Other pages retain v3 behavior. */
+/* Sign-in: the server holds the session; the page only asks who is signed in. */
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const response = await nativeFetch(...args);
+  if(response.status===401) location.href='/login';  // session expired
+  return response;
+};
+async function loadMe(){
+  try {
+    const response=await fetch('/api/me', {cache:'no-store'});
+    if(!response.ok) return;
+    S.me=await response.json();
+    // Prototype pages (SQL Workspace, OPA fixtures) start from the signed-in role as well.
+    S.identity=S.me.trino_user||'blocked_user';
+    render();
+  } catch(error) {}
+}
+
+/* Gold reports use the signed-in role's live, signed Metabase dashboard. Other pages retain v3 behavior. */
 let goldRefreshTimer = null;
 function vGold(){
   return `
@@ -20,8 +37,8 @@ function vGold(){
   </div>
   <section class="card bi-context">
     <div class="row" style="justify-content:space-between"><b>Metabase · Live Gold dashboard · capstone-opa-trino-iceberg</b>
-      <span class="pill teal">Trino identity: safety_analyst · read-only</span></div>
-    <p class="small muted" style="margin-top:9px">Use Flight date and Aircraft type inside the dashboard. Source: capstone-opa-trino-iceberg · Trino localhost:8083. These charts read this repo’s Gold tables; the other prototype pages keep their sample data. Demo identity changes apply to OPA fixtures, not this shared BI connection.</p>
+      <span class="pill teal" id="bi-identity">Checking your role…</span></div>
+    <p class="small muted" style="margin-top:9px">Use Flight date and Aircraft type inside the dashboard. Each role has its own dashboard. Its charts query this repo’s Gold tables through Trino over HTTPS with that role’s login, so OPA filters rows and masks columns before Metabase receives them. Flight Explorer reads Silver the same way; Cockpit and SQL Workspace keep their sample data.</p>
   </section>
   <section class="card bi-dashboard">
     <div id="bi-load-state" role="status" class="bi-load-state">Connecting to Metabase…</div>
@@ -32,32 +49,32 @@ async function initGoldEmbed(){
   clearTimeout(goldRefreshTimer);
   const frame=document.getElementById('gold-metabase-frame');
   const state=document.getElementById('bi-load-state');
+  const pill=document.getElementById('bi-identity');
   if(!frame||!state) return;
   state.hidden=false; state.textContent='Connecting to Metabase…';
   try {
     const response=await fetch('/api/bi/embed', {cache:'no-store'});
     const info=await response.json();
-    if(!response.ok) throw new Error(info.error||'Metabase is not ready.');
+    if(!response.ok) throw Object.assign(new Error(info.error||'Metabase is not ready.'), {fromServer:true});
     if(!frame.isConnected) return;
+    if(pill) pill.textContent=`${info.role_label} dashboard · Trino user ${info.query_identity} · read-only`;
     frame.onload=()=>{ if(state.isConnected) state.hidden=true; };
     frame.src=info.embed_url; frame.hidden=false;
     state.textContent='Loading the Gold dashboard…';
     goldRefreshTimer=setTimeout(()=>{if(S.page==='gold') initGoldEmbed();}, info.refresh_after_seconds*1000);
   } catch(error){
-    if(state.isConnected) state.textContent='Dashboard unavailable. Start the local BI demo server and Metabase, then use Refresh dashboard.';
+    if(!state.isConnected) return;
+    state.textContent=error.fromServer?error.message:'Dashboard unavailable. Start the local BI demo server and Metabase, then use Refresh dashboard.';
+    if(pill && error.fromServer) pill.textContent='No dashboard for this account';
   }
 }
 '''
 
 def build():
-    identity = get_query_identity()
     text = SOURCE.read_text(encoding="utf-8")
     start = text.index("/* =====================================================================\n   PAGE: GOLD REPORTS")
     end = text.index("/* =====================================================================\n   PAGE: SITE MAP", start)
-    gold = GOLD.replace("safety_analyst", identity)
-    if identity == "admin":
-        gold = gold.replace("admin · read-only", "admin · demo")
-    text = text[:start] + gold + "\n" + text[end:]
+    text = text[:start] + GOLD + "\n" + text[end:]
     explorer_start = text.index("/* =====================================================================\n   PAGE: FLIGHT EXPLORER")
     explorer_end = text.index("/* =====================================================================\n   PAGE: FLIGHT DETAIL", explorer_start)
     text = text[:explorer_start] + (ROOT / "bi/web/flight-explorer.js").read_text(encoding="utf-8") + "\n" + text[explorer_end:]
@@ -86,16 +103,35 @@ def build():
     gold_map_start = text.index("    ['Gold Reports','--st4','gold',[")
     gold_map_end = text.index("    ['Prototype'", gold_map_start)
     text = text[:gold_map_start] + """    ['Gold Reports','--st4','gold',[
-      ['Metabase dashboard','content',null,null,'live Gold through Trino · shared safety_analyst connection'],
+      ['Metabase dashboard','content',null,null,'live Gold through Trino · dashboard of the signed-in role'],
       ['Filters and KPIs','content',null,null,'flight date · aircraft type · count · time · altitude'],
       ['Charts and tables','content',null,null,'route · phases · flight summary · events'],
     ]],
-""".replace("safety_analyst", identity) + text[gold_map_end:]
+""" + text[gold_map_end:]
     text = text.replace("Metabase handoff and dashboard filters are proposed; only one verified Gold flight represented.",
-                        f"Flight Explorer reads Silver through Trino. Gold Reports embeds a live Metabase dashboard using the shared capstone Trino {identity} connection. Cockpit and SQL Workspace retain prototype data.")
-    text = text.replace("These charts read this repo’s Gold tables; the other prototype pages keep their sample data.", "These charts read this repo’s Gold tables. Flight Explorer reads Silver; Cockpit and SQL Workspace keep their prototype data.")
+                        "Flight Explorer reads Silver through Trino. Gold Reports embeds the live Metabase dashboard of the signed-in role. Both query Trino as that role, so OPA applies. Cockpit and SQL Workspace retain prototype data.")
     text = text.replace("Gold Reports → Flights table → <b>Flight Detail</b>",
                         "Gold Reports → <b>Metabase dashboard</b> (live Gold; cross-page drill-through is not configured)")
+    # Sign-in replaces the mock identity switcher: the role comes from the identity provider.
+    top_start = text.index("function renderTop(){")
+    top_end = text.index("/* =====================================================================\n   PHASE BAR", top_start)
+    text = text[:top_start] + """function renderTop(){
+  const me = S.me;
+  $('#top').innerHTML = `
+    <div class="crumbs">${crumbs()}</div>
+    <div class="top-right">
+      <span class="utc" title="All timestamps and playback are UTC">UTC</span>
+      <span class="idbtn ${me&&me.role?'alt':''}" title="${me&&me.scope?esc(me.scope):'No dashboard role assigned'}">
+        <span>${me?`Signed in: <b>${esc(me.user)}</b> · ${esc(me.role_label||'No role')}`:'Checking sign-in…'}</span></span>
+      <a class="btn" href="/logout">Sign out</a>
+    </div>`;
+}
+
+""" + text[top_end:]
+    saved_identity = "  const saved=store.get('qar.identity'); if(IDENTITIES.some(i=>i.k===saved)) S.identity=saved;\n"
+    if text.count(saved_identity) != 1:
+        raise ValueError("Source boot structure changed; review before rebuilding.")
+    text = text.replace(saved_identity, "  loadMe();\n")
     text = text.replace("</style>", """\n/* Live Metabase panel */
 .bi-dashboard{padding:8px;overflow:hidden}
 .bi-dashboard iframe{display:block;width:100%;height:1560px;border:0;background:white;border-radius:6px}

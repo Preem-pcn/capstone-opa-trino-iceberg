@@ -1,6 +1,6 @@
 {
   "name": "QAR Gold Overview - capstone repo",
-  "description": "Existing Gold tables generated from this repository decoded recordings. Source: capstone-opa-trino-iceberg, Trino port 8083, locally configured shared demo identity.",
+  "description": "Existing Gold tables generated from this repository decoded recordings. One dashboard per role; each queries Trino over HTTPS with that role's own login, so OPA filters and masks every chart.",
   "intro": "## QAR · Gold Overview",
   "cards": [
     {
@@ -55,7 +55,11 @@
       "row": 6,
       "col": 0,
       "size_x": 12,
-      "size_y": 7
+      "size_y": 7,
+      "roles": [
+        "safety",
+        "operations"
+      ]
     },
     {
       "key": "phase_minutes",
@@ -76,7 +80,13 @@
       "row": 6,
       "col": 12,
       "size_x": 12,
-      "size_y": 7
+      "size_y": 7,
+      "layout": {
+        "engineering": {
+          "col": 0,
+          "size_x": 24
+        }
+      }
     },
     {
       "key": "flight_summary",
@@ -87,7 +97,25 @@
       "row": 13,
       "col": 0,
       "size_x": 24,
-      "size_y": 7
+      "size_y": 7,
+      "roles": [
+        "safety",
+        "engineering"
+      ]
+    },
+    {
+      "key": "flight_summary_ops",
+      "name": "Flight summary · existing Gold data",
+      "display": "table",
+      "query": "flight_summary_ops.sql",
+      "settings": {},
+      "row": 13,
+      "col": 0,
+      "size_x": 24,
+      "size_y": 7,
+      "roles": [
+        "operations"
+      ]
     },
     {
       "key": "flight_events",

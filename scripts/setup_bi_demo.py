@@ -1,7 +1,8 @@
-"""Create/verify the local Metabase Gold demo without changing lakehouse data.
+"""Create/verify the local Metabase Gold dashboards, one per role, without changing lakehouse data.
 
 Python standard library only. Credentials stay in ignored .secrets/ files.
-Charts use the locally configured fixed Trino identity (default safety_analyst).
+Each role gets its own Trino connection (HTTPS, that role's Trino login), collection
+and dashboard. Every chart therefore runs as the role's Trino user and OPA filters it.
 """
 
 import argparse
@@ -10,23 +11,17 @@ import os
 import secrets
 import time
 import uuid
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
-from bi_demo_settings import IDENTITIES, get_query_identity, set_query_identity
+from bi_demo_settings import ROLES, ROOT, embed_url, read_secret, write_json
 
-ROOT = Path(__file__).resolve().parents[1]
 AUTH_FILE = ROOT / ".secrets/metabase-demo.json"
-STATE_FILE = ROOT / ".secrets/metabase-demo-state.json"
+STATE_FILE = ROOT / ".secrets/metabase-sso-state.json"
+EMBED_FILE = ROOT / ".secrets/metabase-embed.json"
 MANIFEST = json.loads((ROOT / "bi/dashboard.json").read_text(encoding="utf-8"))
-
-
-def write_json(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    temporary.replace(path)
+PARAMETERS = [{"id": "flight_date", "name": "Flight date", "slug": "flight_date", "type": "date/single"},
+              {"id": "aircraft_type", "name": "Aircraft type", "slug": "aircraft_type", "type": "category"}]
 
 
 class Metabase:
@@ -53,7 +48,7 @@ class Metabase:
         except HTTPError as exc:
             # Do not dump connection details or request payloads containing passwords.
             message = exc.read().decode(errors="replace")
-            for source in [AUTH_FILE, ROOT / ".secrets/users.json"]:
+            for source in [AUTH_FILE, ROOT / ".secrets/trino-users.json"]:
                 if source.exists():
                     for value in json.loads(source.read_text(encoding="utf-8")).values():
                         if isinstance(value, str) and len(value) > 10:
@@ -85,6 +80,12 @@ class Metabase:
         self.session = self.api("POST", "/session", {"username": auth["email"], "password": auth["password"]})["id"]
 
 
+def cards_for(role):
+    """Cards this role's dashboard gets: optional "roles" filter and per-role "layout" override."""
+    return [{**card, **card.get("layout", {}).get(role, {})}
+            for card in MANIFEST["cards"] if role in card.get("roles", ROLES)]
+
+
 def dataset(database_id, card):
     query = (ROOT / "bi/queries" / card["query"]).read_text(encoding="utf-8")
     tags = {name: {"id": str(uuid.uuid5(uuid.NAMESPACE_URL, "qar-bi/" + name)),
@@ -94,57 +95,66 @@ def dataset(database_id, card):
     return {"database": database_id, "type": "native", "native": {"query": query, "template-tags": tags}}
 
 
-def seed(client, identity=None):
-    identity = identity or get_query_identity()
-    state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if STATE_FILE.exists() else {"cards": {}}
-    connection = {"name": f"Capstone Gold - Trino 8083 ({identity})",
-                  "engine": "starburst", "is_full_sync": False,
-                  "details": {"host": "trino", "port": 8080, "catalog": "iceberg", "schema": "gold",
-                              "user": identity, "ssl": False, "prepared-optimized": True}}
-    if not state.get("database_id"):
-        state["database_id"] = client.api("POST", "/database", connection)["id"]
-        write_json(STATE_FILE, state)
+def connection(role):
+    user = ROLES[role]["trino_user"]
+    # The container trusts Trino's self-signed certificate mounted at /tls (see docker-compose.bi-local.yaml).
+    return {"name": f"QAR Gold · {ROLES[role]['label']} ({user})", "engine": "starburst", "is_full_sync": False,
+            "details": {"host": "trino", "port": 8443, "catalog": "iceberg", "schema": "gold",
+                        "user": user, "password": read_secret("trino-users.json")[user], "ssl": True,
+                        "additional-options": "SSLTrustStorePath=/tls/trino.crt", "prepared-optimized": True}}
+
+
+def seed_role(client, role, state):
+    info, saved = ROLES[role], state["roles"].setdefault(role, {"cards": {}})
+    if saved.get("database_id"):
+        client.api("PUT", f'/database/{saved["database_id"]}', connection(role))
     else:
-        client.api("PUT", f'/database/{state["database_id"]}', connection)
-    set_query_identity(identity)
-    if not state.get("collection_id"):
-        state["collection_id"] = client.api("POST", "/collection", {
-            "name": "QAR Gold BI POC", "description": MANIFEST["description"], "color": "#509EE3"})["id"]
+        saved["database_id"] = client.api("POST", "/database", connection(role))["id"]
         write_json(STATE_FILE, state)
-    if not state.get("dashboard_id"):
-        state["dashboard_id"] = client.api("POST", "/dashboard", {
-            "name": MANIFEST["name"], "description": MANIFEST["description"],
-            "collection_id": state["collection_id"]})["id"]
+    if not saved.get("collection_id"):
+        saved["collection_id"] = client.api("POST", "/collection", {
+            "name": f"QAR · {info['label']}", "description": MANIFEST["description"], "color": "#509EE3"})["id"]
         write_json(STATE_FILE, state)
-    for card in MANIFEST["cards"]:
+    name = f'{MANIFEST["name"]} · {info["label"]}'
+    if not saved.get("dashboard_id"):
+        saved["dashboard_id"] = client.api("POST", "/dashboard", {
+            "name": name, "description": MANIFEST["description"], "collection_id": saved["collection_id"]})["id"]
+        write_json(STATE_FILE, state)
+    cards = cards_for(role)
+    for card in cards:
         body = {"name": card["name"], "display": card["display"],
-                "description": f"POC: existing Gold data through capstone Trino as {identity}; draft metric for discussion.",
-                "collection_id": state["collection_id"], "dataset_query": dataset(state["database_id"], card),
+                "description": f"Runs as Trino user {info['trino_user']}; OPA filters and masks the result.",
+                "collection_id": saved["collection_id"], "dataset_query": dataset(saved["database_id"], card),
                 "visualization_settings": card["settings"]}
-        existing_id = state["cards"].get(card["key"])
-        saved = client.api("PUT" if existing_id else "POST", f"/card/{existing_id}" if existing_id else "/card", body)
-        state["cards"][card["key"]] = saved["id"]
+        existing_id = saved["cards"].get(card["key"])
+        result = client.api("PUT" if existing_id else "POST", f"/card/{existing_id}" if existing_id else "/card", body)
+        saved["cards"][card["key"]] = result["id"]
         write_json(STATE_FILE, state)
-        print("Saved:", card["key"], flush=True)
-    parameters = [{"id": "flight_date", "name": "Flight date", "slug": "flight_date", "type": "date/single"},
-                  {"id": "aircraft_type", "name": "Aircraft type", "slug": "aircraft_type", "type": "category"}]
-    client.api("PUT", f'/dashboard/{state["dashboard_id"]}', {
-        "name": MANIFEST["name"], "description": MANIFEST["description"], "parameters": parameters})
+        print(f"Saved {role}: {card['key']}", flush=True)
+    client.api("PUT", f'/dashboard/{saved["dashboard_id"]}', {
+        "name": name, "description": MANIFEST["description"], "parameters": PARAMETERS})
     # Preserve server dashcard IDs on reruns rather than accumulating duplicates.
-    existing = client.api("GET", f'/dashboard/{state["dashboard_id"]}')
+    existing = client.api("GET", f'/dashboard/{saved["dashboard_id"]}')
     previous = {c.get("card_id"): c["id"] for c in existing.get("dashcards", [])}
+    intro = f'{MANIFEST["intro"]} · {info["label"]}\n\nTrino user `{info["trino_user"]}` · {info["scope"]}'
     dashcards = [{"id": previous.get(None, -1), "card_id": None, "row": 0, "col": 0,
                   "size_x": 24, "size_y": 2, "parameter_mappings": [],
-                  "visualization_settings": {"text": MANIFEST["intro"], "virtual_card": {"display": "text"}}}]
-    for index, card in enumerate(MANIFEST["cards"], start=2):
-        card_id = state["cards"][card["key"]]
+                  "visualization_settings": {"text": intro, "virtual_card": {"display": "text"}}}]
+    for index, card in enumerate(cards, start=2):
+        card_id = saved["cards"][card["key"]]
         dashcards.append({"id": previous.get(card_id, -index), "card_id": card_id,
                           **{k: card[k] for k in ["row", "col", "size_x", "size_y"]},
                           "visualization_settings": {},
                           "parameter_mappings": [{"parameter_id": p["id"], "card_id": card_id,
                                                   "target": ["variable", ["template-tag", p["id"]]]}
-                                                 for p in parameters]})
-    client.api("PUT", f'/dashboard/{state["dashboard_id"]}/cards', {"cards": dashcards})
+                                                 for p in PARAMETERS]})
+    client.api("PUT", f'/dashboard/{saved["dashboard_id"]}/cards', {"cards": dashcards})
+
+
+def seed(client):
+    state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if STATE_FILE.exists() else {"roles": {}}
+    for role in ROLES:
+        seed_role(client, role, state)
     return state
 
 
@@ -158,87 +168,83 @@ def query_card(client, card_id, parameters=None):
 
 
 def verify(client, state):
-    identity = get_query_identity()
-    result = client.api("POST", "/dataset", {"database": state["database_id"], "type": "native",
-                                            "native": {"query": "SELECT current_user"}})
-    if result.get("status") != "completed" or result["data"]["rows"] != [[identity]]:
-        raise RuntimeError("Metabase is not querying Trino with the configured demo identity")
-    print(f"PASS Trino current_user through Metabase: {identity}", flush=True)
-    dashboard = client.api("GET", f'/dashboard/{state["dashboard_id"]}')
-    chart_cards = [c for c in dashboard.get("dashcards", []) if c.get("card_id")]
-    if len(chart_cards) != len(MANIFEST["cards"]):
-        raise RuntimeError("Dashboard does not contain all expected cards.")
-    for card in MANIFEST["cards"]:
-        rows = query_card(client, state["cards"][card["key"]])
-        print(f'PASS {card["key"]}: {len(rows)} result row(s)', flush=True)
-        if card["key"] == "flight_count":
-            if not rows or rows[0][0] == 0:
-                raise RuntimeError("Gold contains no flight summaries; no sample data was fabricated.")
-            print(f'Gold flight count: {rows[0][0]}', flush=True)
-    summary_rows = query_card(client, state["cards"]["flight_summary"])
+    for role, info in ROLES.items():
+        saved = state["roles"][role]
+        result = client.api("POST", "/dataset", {"database": saved["database_id"], "type": "native",
+                                                "native": {"query": "SELECT current_user"}})
+        if result.get("status") != "completed" or result["data"]["rows"] != [[info["trino_user"]]]:
+            raise RuntimeError(f"Metabase is not querying Trino as {info['trino_user']} for {role}")
+        dashboard = client.api("GET", f'/dashboard/{saved["dashboard_id"]}')
+        if len([c for c in dashboard.get("dashcards", []) if c.get("card_id")]) != len(cards_for(role)):
+            raise RuntimeError(f"The {role} dashboard does not contain all expected cards.")
+        for card in cards_for(role):
+            query_card(client, saved["cards"][card["key"]])
+        flights = query_card(client, saved["cards"]["flight_count"])[0][0]
+        print(f"PASS {role}: Trino user {info['trino_user']}, {len(cards_for(role))} cards, {flights} flight(s)", flush=True)
+    # Filters: the Safety dashboard sees every flight, so test both filter paths there.
+    cards = state["roles"]["safety"]["cards"]
+    summary_rows = query_card(client, cards["flight_summary"])
+    if not summary_rows:
+        raise RuntimeError("Gold contains no flight summaries; no sample data was fabricated.")
     aircraft_type = summary_rows[0][2]
-    # Positive filter path, then no-match path, using the same template tags as the dashboard.
-    filtered = query_card(client, state["cards"]["flight_count"], [{
+    filtered = query_card(client, cards["flight_count"], [{
         "type": "category", "target": ["variable", ["template-tag", "aircraft_type"]], "value": aircraft_type}])
     if not filtered or filtered[0][0] < 1:
         raise RuntimeError("Aircraft filter failed to select existing sample data.")
-    date_filtered = query_card(client, state["cards"]["flight_count"], [{
+    date_filtered = query_card(client, cards["flight_count"], [{
         "type": "date/single", "target": ["variable", ["template-tag", "flight_date"]], "value": summary_rows[0][0]}])
     if not date_filtered or date_filtered[0][0] < 1:
         raise RuntimeError("Flight-date filter failed to select existing sample data.")
-    no_match = query_card(client, state["cards"]["flight_count"], [{
+    no_match = query_card(client, cards["flight_count"], [{
         "type": "category", "target": ["variable", ["template-tag", "aircraft_type"]], "value": "__NO_MATCH_QAR_DEMO__"}])
     if no_match != [[0]]:
         raise RuntimeError("No-match filter did not return zero flights.")
     print("PASS aircraft/date filters and no-match result", flush=True)
-    print(f'Dashboard: {client.base}/dashboard/{state["dashboard_id"]}', flush=True)
-    print("Local login: .secrets/metabase-demo.json (do not commit/share this file)", flush=True)
+    print(f"Metabase admin: {client.base} (login in .secrets/metabase-demo.json; do not commit/share it)", flush=True)
 
 
 def enable_embed(client, state):
-    from serve_bi_demo import CONFIG
-    current = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
+    current = json.loads(EMBED_FILE.read_text(encoding="utf-8")) if EMBED_FILE.exists() else {}
     settings = {item["key"]: item.get("value") for item in client.api("GET", "/setting")}
     secret = current.get("secret") or settings.get("embedding-secret-key") or secrets.token_hex(32)
     if not isinstance(secret, str) or len(secret) != 64:
         raise RuntimeError("An existing embedding secret could not be read; refusing to replace it.")
-    write_json(CONFIG, {"metabase_url": client.base, "dashboard_id": state["dashboard_id"], "secret": secret})
+    dashboards = {role: saved["dashboard_id"] for role, saved in state["roles"].items()}
+    write_json(EMBED_FILE, {"metabase_url": client.base, "secret": secret, "dashboards": dashboards})
     client.api("PUT", "/setting/embedding-secret-key", {"value": secret})
     client.api("PUT", "/setting/enable-embedding-static", {"value": True})
     client.api("PUT", "/setting/report-timezone", {"value": "UTC"})
-    client.api("PUT", f'/dashboard/{state["dashboard_id"]}', {
-        "enable_embedding": True,
-        "embedding_params": {"flight_date": "enabled", "aircraft_type": "enabled"}})
-    print("Enabled signed embedding for the QAR Gold dashboard only.", flush=True)
+    for dashboard_id in dashboards.values():
+        client.api("PUT", f"/dashboard/{dashboard_id}", {
+            "enable_embedding": True,
+            "embedding_params": {"flight_date": "enabled", "aircraft_type": "enabled"}})
+    print("Enabled signed embedding for the role dashboards only.", flush=True)
 
 
 def verify_embed(client, state):
-    from serve_bi_demo import embed_info
-    token = embed_info()["embed_url"].split("/embed/dashboard/", 1)[1].split("#", 1)[0]
     anonymous = Metabase(client.base)
-    dashboard = anonymous.api("GET", "/embed/dashboard/" + token)
-    if dashboard.get("id") != state["dashboard_id"]:
-        raise RuntimeError("Signed embed returned an unexpected dashboard.")
-    # Use an unauthenticated client to ensure a tampered token cannot load the dashboard.
-    unsigned, signature = token.rsplit(".", 1)
-    tampered = unsigned + "." + ("a" if signature[0] != "a" else "b") + signature[1:]
+    tokens = {}
+    for role, saved in state["roles"].items():
+        tokens[role] = embed_url(saved["dashboard_id"]).split("/embed/dashboard/", 1)[1].split("#", 1)[0]
+        if anonymous.api("GET", "/embed/dashboard/" + tokens[role]).get("id") != saved["dashboard_id"]:
+            raise RuntimeError(f"Signed embed for {role} returned an unexpected dashboard.")
+    # A viewer who edits the token to open another role's dashboard keeps the old signature: rejected.
+    header, _, signature = tokens["operations"].split(".")
+    _, payload, _ = tokens["safety"].split(".")
     try:
-        anonymous.api("GET", "/embed/dashboard/" + tampered)
+        anonymous.api("GET", f"/embed/dashboard/{header}.{payload}.{signature}")
     except RuntimeError:
         pass
     else:
-        raise RuntimeError("A tampered embedding token was accepted.")
-    print("PASS signed dashboard metadata and rejected tampered token", flush=True)
+        raise RuntimeError("A token with another role's dashboard and a stale signature was accepted.")
+    print("PASS signed dashboard per role and rejected an edited token", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://localhost:3002")
     parser.add_argument("--check", action="store_true", help="Verify the existing demo without updating it")
-    parser.add_argument("--identity", choices=IDENTITIES, help="Set the fixed identity for this local demo")
     args = parser.parse_args()
-    if args.check and args.identity:
-        parser.error("--check cannot change the demo identity")
     client = Metabase(args.url)
     for attempt in range(12):
         try:
@@ -251,7 +257,7 @@ def main():
         print("Waiting for Metabase health...", flush=True)
         time.sleep(5)
     client.login(allow_setup=not args.check)
-    state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if args.check else seed(client, args.identity)
+    state = json.loads(STATE_FILE.read_text(encoding="utf-8")) if args.check else seed(client)
     verify(client, state)
     if not args.check:
         enable_embed(client, state)
@@ -259,7 +265,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (RuntimeError, OSError, ValueError) as exc:
-        raise SystemExit(str(exc)) from None
+    main()

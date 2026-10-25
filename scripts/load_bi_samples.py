@@ -11,6 +11,8 @@ from pathlib import Path
 import trino
 from pyiceberg.catalog import load_catalog
 
+from bi_demo_settings import trino_connection
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.dont_write_bytecode = True
@@ -18,8 +20,7 @@ import load_silver as loader
 
 
 def execute(statement, user="dagster"):
-    connection = trino.dbapi.connect(host="127.0.0.1", port=8083, user=user,
-                                    catalog="iceberg", request_timeout=180)
+    connection = trino_connection(user, request_timeout=180)
     try:
         cursor = connection.cursor()
         cursor.execute(statement)
@@ -67,7 +68,7 @@ def verify(folders):
         else:
             raise RuntimeError(f"Expected OPA denial for {user}")
         print(f"PASS OPA denial: {user}", flush=True)
-    print("PASS source: capstone-opa-trino-iceberg / Trino 8083 / local decoded", flush=True)
+    print("PASS source: capstone-opa-trino-iceberg / Trino HTTPS 8443 / local decoded", flush=True)
 
 
 def main(argv=None):

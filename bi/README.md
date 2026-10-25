@@ -2,8 +2,14 @@
 
 เดโมนี้ใช้ข้อมูล `decoded/` และ Gold SQL ของ checkout นี้โดยตรง
 เปิด stack แยกด้วย `docker-compose.bi-local.yaml` (ไม่ merge กับ compose เดิม)
-ชื่อ project คือ `qar-capstone-bi` ไม่ใช้ container, catalog หรือ object storage ของ
+ชื่อ project คือ `qar-capstone-sso` ไม่ใช้ container, catalog หรือ object storage ของ
 `C:\QAR\trino-iceberg-poc` และไม่แก้ policy OPA เดิม
+stack รุ่นก่อนที่ไม่มี login (project `qar-capstone-bi`) และ volumes ของมันไม่ถูกแตะ
+ครั้งแรกที่เปิด stack นี้จะได้ volumes ใหม่ startup script โหลดข้อมูลตัวอย่างให้เอง
+
+ผู้ใช้ login ผ่าน Keycloak (OIDC) แล้วเห็น dashboard ของ role ตัวเอง
+แต่ละ role มี Trino login (HTTPS + password) ของตัวเอง OPA จึงกรองทุกกราฟตาม role
+แนวคิดทั้งหมดอยู่ใน `METABASE_ROLE_DESIGN.md` ที่ root ของ repo
 
 ## เปิดใช้งาน
 
@@ -17,22 +23,46 @@ cd C:\QAR\capstone-opa-trino-iceberg
 powershell -File scripts/start_bi_demo.ps1
 ```
 
-เปิดเว็บ **http://localhost:8766/#gold**
+เปิดเว็บ **http://localhost:8766/** ระบบจะพาไปหน้า login ของ Keycloak
 พอร์ต 8765 คือเดโมเก่าจากอีก repo ไม่ใช่หน้าใหม่นี้
+
+| ผู้ใช้เดโม | Role | เห็นอะไร |
+| --- | --- | --- |
+| `safety.demo` | safety | ทุกเที่ยวบิน, recording/source file ถูก mask |
+| `ops.demo` | operations | เฉพาะเที่ยวบินเข้า/ออก VTBS, tail ถูก mask, ไม่มี touchdown g |
+| `eng.demo` | engineering | เฉพาะเครื่อง HS-THJ, flight number/route ถูก mask |
+| `norole.demo` | ไม่มี | login ได้ แต่ไม่มี dashboard และไม่มีข้อมูล |
+
+password สุ่มตอนสร้าง อยู่ใน `.secrets/demo-logins.json`
 
 | Service | URL / port ฝั่งเครื่อง |
 | --- | --- |
-| เว็บ QAR | http://localhost:8766/#gold |
+| เว็บ QAR | http://localhost:8766/ |
+| Keycloak (login, admin console) | http://localhost:8180 |
 | Metabase | http://localhost:3002 |
-| Trino | http://localhost:8083 |
+| Trino (HTTPS + password เท่านั้น) | https://localhost:8443 |
 | Iceberg REST | http://localhost:9181 |
 | RustFS S3 / console | 9100 / 9101 |
 | OPA | http://localhost:9282 |
 
 พอร์ตทั้งหมด bind เฉพาะ loopback มี named volumes แยกสำหรับ RustFS,
 SQLite catalog และ Metabase H2 พร้อมกำหนด memory limits สำหรับเครื่องเดโม
-บัญชี admin ของ Metabase และ embedding key อยู่ใน `.secrets/` ที่ Git ignore
-ไม่ใส่ credentials หรือ embedding key ลง HTML
+secrets ทั้งหมดอยู่ใน `.secrets/` ที่ Git ignore ไม่ใส่ credentials หรือ key ใดๆ ลง HTML
+
+| ไฟล์ใน `.secrets/` | ใช้ทำอะไร |
+| --- | --- |
+| `trino-users.json`, `trino/password.db` | password ของ Trino ต่อ user (`password.db` เป็น PBKDF2 hash ที่ Trino อ่าน) |
+| `trino/keystore.jks`, `trino-public/trino.crt` | TLS certificate ของ Trino (self-signed); client trust ไฟล์ `.crt` |
+| `trino.env`, `keycloak.env`, `service-secrets.json` | shared secret ของ Trino, password ของ keystore และ Keycloak admin |
+| `oidc-client.json` | client id/secret ที่ backend ใช้คุยกับ Keycloak |
+| `demo-logins.json`, `keycloak/qar-realm.json` | ผู้ใช้เดโมและ realm ที่ Keycloak import ทุกครั้งที่ start |
+| `metabase-demo.json`, `metabase-sso-state.json`, `metabase-embed.json` | Metabase admin, id ของ objects ที่สร้าง และ embedding secret |
+
+`scripts/init_bi_secrets.py` สร้างไฟล์เหล่านี้ (startup script เรียกให้) รันซ้ำได้โดยไม่เปลี่ยนค่าเดิม
+Keycloak admin console ใช้ user `admin` และ password ใน `.secrets/keycloak.env`
+Keycloak รันแบบ dev mode โดยไม่มี volume: realm ถูก import ใหม่จากไฟล์เมื่อสร้าง container ใหม่
+ผู้ใช้ที่เพิ่มผ่าน console จะหายเมื่อสร้าง container ใหม่ ให้เพิ่มใน `DEMO_USERS` ของ `scripts/bi_demo_settings.py` แทน
+แล้วรัน `python scripts/init_bi_secrets.py` และ `docker compose -f docker-compose.bi-local.yaml up -d --force-recreate keycloak`
 
 ## ข้อมูลที่ใช้
 
@@ -116,32 +146,41 @@ events → phases → summary ยังใช้กฎเดิม แต่ป�
 
 ## Metabase และหน้าเว็บ
 
-Metabase อยู่ใน network ของ stack ใหม่นี้ จึงเชื่อม `trino:8080` ไปยัง
-`qar-capstone-bi-trino-1` ซึ่ง expose เป็น host port 8083
-ใช้ Starburst driver, catalog `iceberg`, schema `gold`, user `safety_analyst`
-ตาม role เดิมของ repo ที่อ่านข้อมูลได้และไม่มีสิทธิ์เขียน
+`scripts/setup_bi_demo.py` สร้างของใน Metabase แยกตาม role (ตาม `ROLES` ใน `scripts/bi_demo_settings.py`)
 
-สำหรับเดโม สามารถเปลี่ยน fixed identity ของ connection เป็น admin ได้:
+| Role | Trino connection (user) | Collection / dashboard |
+| --- | --- | --- |
+| safety | `safety_analyst` | `QAR · Safety` |
+| operations | `operations_analyst` | `QAR · Operations` |
+| engineering | `engineering_analyst` | `QAR · Engineering` |
 
-```powershell
-python scripts/setup_bi_demo.py --identity admin
-python scripts/build_bi_page.py
-```
+ทุก connection ใช้ Starburst driver ต่อ `trino:8443` แบบ HTTPS ด้วย password ของ user นั้น
+และ trust certificate ที่ mount ไว้ที่ `/tls/trino.crt` (`additional-options: SSLTrustStorePath=/tls/trino.crt`)
+กราฟแต่ละอันผูกกับ connection ของ role ตัวเอง จึงส่ง Trino user ของ role นั้นทุก query
+การตรวจใช้ `SELECT current_user` ผ่านแต่ละ connection เพื่อยืนยัน user ที่ถึง Trino จริง
 
-ค่าที่เลือกเก็บเฉพาะเครื่องใน `.secrets/bi-demo-settings.json` รัน startup ซ้ำจะใช้ค่านี้ต่อ
-และหน้า Gold Reports แสดง identity ที่ใช้อยู่ admin มีสิทธิ์กว้างตาม policy เดิมของ repo
-หากเว็บ server เปิดอยู่ให้ restart หลังอัปเดตโค้ดเพื่อให้โหลดค่าจาก settings
-กลับไปใช้สิทธิ์อ่านข้อมูลด้วย `python scripts/setup_bi_demo.py --identity safety_analyst`
-แล้ว build หน้าเว็บอีกครั้ง ค่าเริ่มต้นของเครื่องที่ยังไม่มี settings ยังคงเป็น safety_analyst
-การตรวจรายงานใช้ `SELECT current_user` ผ่าน Metabase เพื่อยืนยัน user ที่ถึง Trino จริง
+Trino ของ stack นี้ปิด plain HTTP สำหรับ client (ตอบ `Authentication over HTTP is not enabled`)
+และไม่ publish port 8080 ออกนอก container ใช้ file password authenticator
+(`bi/trino/password-authenticator.properties`) login ของ role หนึ่งสวมเป็น user อื่นไม่ได้
+เพราะ OPA ไม่อนุญาต impersonation ไม่ได้เปลี่ยน OPA ให้เปิดสิทธิ์เพิ่ม บัญชี `operations_analyst`
+ยังคงอ่าน `touchdown_peak_g` ไม่ได้ และ `blocked_user` ยังถูกปฏิเสธ
 
-repo นี้เป็น local HTTP authorization POC ที่ผู้เรียกส่งชื่อ user เอง ไม่มี password login
-ไม่เท่ากับระบบยืนยันตัวตนรายบุคคล และไม่ได้ใช้ TLS/password configuration ของ repo เก่า
-ไม่ได้เปลี่ยน OPA ให้เปิดสิทธิ์เพิ่ม บัญชี `operations_analyst` ยังคงอ่าน
-`touchdown_peak_g` ไม่ได้ และ `blocked_user` ยังถูกปฏิเสธ
+กราฟทั้งหมดมาจาก `bi/dashboard.json` และ `bi/queries/*.sql` ชุดเดียว แต่ละ card มี key เสริมได้:
+- `"roles"`: role ที่ได้ card นี้ (ไม่ใส่ = ทุก role)
+- `"layout"`: ตำแหน่ง/ขนาดเฉพาะ role เช่น `{"engineering": {"col": 0, "size_x": 24}}`
 
-มี 7 cards: จำนวนเที่ยวบิน, airborne minutes รวม, ความสูงสูงสุด, จำนวนเที่ยวบินตามเส้นทาง,
-เวลาตาม phase รวม ground, ตาราง summary และตาราง events พร้อมตัวกรองวันบิน/ชนิดเครื่อง
+ตั้งไว้ให้เข้ากับ policy ของ OPA:
+- Engineering ไม่มีกราฟ Flights by route เพราะ origin/destination ถูก mask เหลือแท่ง REDACTED แท่งเดียว
+  กราฟ phase จึงขยายเต็มแถว
+- Operations ใช้ `flight_summary_ops.sql` ที่ไม่มี `touchdown_peak_g` เพราะ OPA ปฏิเสธ column นี้
+- ป้าย `data_source` อ่านจาก `silver.flights.decoder_version` เพราะ flight_id ของ Operations ถูก pseudonymize
+
+ถ้าแก้กราฟในหน้า Metabase แล้วรัน `setup_bi_demo.py` ซ้ำ ค่าจาก json จะเขียนทับ
+ให้แก้ที่ json/SQL เป็นหลัก
+
+Safety และ Operations มี 7 cards, Engineering มี 6 cards: จำนวนเที่ยวบิน, airborne minutes รวม,
+ความสูงสูงสุด, จำนวนเที่ยวบินตามเส้นทาง (ไม่มีใน Engineering), เวลาตาม phase รวม ground,
+ตาราง summary และตาราง events พร้อมตัวกรองวันบิน/ชนิดเครื่อง
 ตัวชี้วัดเป็น POC รอเก็บ requirement ไม่ใช้ placeholder hard landing threshold เป็น KPI
 ตารางจำกัด 200 แถว ส่วน KPI/กราฟคำนวณทุกแถวที่ตรงตัวกรอง
 reference ของ flight ในรายงานเป็น SHA-256 prefix 12 ตัวเพื่อแยกแต่ละเที่ยวบิน
@@ -155,7 +194,9 @@ reference ของ flight ในรายงานเป็น SHA-256 prefix 1
 Gold Reports แสดง dashboard จริง และ Flight Explorer อ่านรายการจาก Silver ผ่าน Trino
 พร้อมเปิดรายละเอียดจาก Silver และ metrics/phases/events จาก Gold ตาม flight ID ที่เลือก
 ส่วน Cockpit และ SQL Workspace ยังใช้ข้อมูล prototype เดิม
-ตัวเลือก Demo identity ใช้กับ OPA fixtures ไม่มีผลต่อ shared BI connection หรือ Flight API
+แถบบนแสดงผู้ใช้ที่ login และ role พร้อมปุ่ม Sign out (แทนตัวเลือก Demo identity เดิม)
+หน้า prototype (SQL Workspace, OPA fixtures) เริ่มจาก Trino user ของ role ที่ login
+ปุ่มในหน้า OPA fixtures ยังสลับ identity ได้เพราะใช้ข้อมูล mock ไม่ได้ query Trino
 
 ### Flight Explorer
 
@@ -172,15 +213,38 @@ API อ่าน metadata สูงสุด 1,000 เที่ยวบิน�
 
 `GET /api/flights` ใช้ SELECT ที่กำหนดไว้ และ `GET /api/flights/detail?id=...`
 ใช้ parameterized query ของ flight ID เพื่ออ่าน metadata, summary, phases และ events
-ไม่มี endpoint รับ SQL หรือเปลี่ยน identity จาก browser; ใช้ fixed identity จาก settings
-เดียวกับ BI (เครื่องเดโมนี้เป็น admin) เวลาแสดงเป็น UTC
+ไม่มี endpoint รับ SQL หรือเปลี่ยน identity จาก browser; query ด้วย Trino user ของ role ที่ login
+(HTTPS + password ของ user นั้น) OPA จึงกรองแถวและ mask เหมือน dashboard
+ถ้า OPA ปฏิเสธบาง column ของ summary (เช่น `touchdown_peak_g` ของ Operations) API อ่านรายชื่อ column
+ที่ role นั้นเห็นจาก `information_schema.columns` แล้วเลือกเฉพาะ column เหล่านั้น หน้าเว็บแสดงเป็น `—`
+เวลาแสดงเป็น UTC
 เว็บ server รันเป็น service `bi-web` ใน `docker-compose.bi-local.yaml` (build หน้าเว็บใหม่ทุกครั้งที่ start)
 หลังแก้ไฟล์ใน `scripts/` หรือ `bi/web/qar-flight-analytics_3.html` ให้รัน
 `docker compose -f docker-compose.bi-local.yaml restart bi-web` แล้ว reload หน้าเว็บ
 
-`serve_bi_demo.py` ให้บริการเว็บเฉพาะ loopback และออก JWT อายุ 10 นาทีสำหรับ dashboard เดียว
-เว็บต่ออายุทุก 8 นาที มีปุ่ม refresh และเปิด dashboard แยกแท็บ
-ไม่มี public link หรือการเปลี่ยนสิทธิ์ตามผู้ชม ใช้ signed/static embedding ที่ Metabase เวอร์ชันนี้รองรับ
+### Login และ backend (`serve_bi_demo.py`)
+
+| Endpoint | ทำอะไร |
+| --- | --- |
+| `/login` | เริ่ม OIDC authorization code flow + PKCE แล้ว redirect ไป Keycloak |
+| `/callback` | รับ code, แลกเป็น ID token ทาง back-channel, ตรวจลายเซ็น/issuer/audience/nonce แล้วสร้าง session |
+| `/logout` | ลบ session ของเว็บ และจบ session ที่ Keycloak (login ครั้งต่อไปต้องใส่ password ใหม่) |
+| `/api/me` | ผู้ใช้, role, Trino user ของ session นี้ |
+| `/api/bi/embed`, `/metabase` | เซ็น JWT อายุ 10 นาทีสำหรับ dashboard ของ role นี้เท่านั้น |
+| `/api/flights`, `/api/flights/detail` | Flight API ด้วย Trino user ของ role นี้ |
+
+- ยังไม่ login: หน้าเว็บ redirect ไป `/login` ส่วน API ตอบ 401 (หน้าเว็บพาไป login ให้)
+- login แล้วแต่ไม่มี role หรือมีหลาย role: API ข้อมูลตอบ 403 และหน้า Gold Reports แสดงข้อความ
+- role อ่านจาก claim `roles` ใน ID token ซึ่งเป็นชื่อเดียวกับ app roles ของ Entra ID
+- session เก็บใน memory ของ server, cookie เป็น HttpOnly + SameSite=Lax, อายุ 8 ชั่วโมง restart server แล้วต้อง login ใหม่
+- เว็บต่ออายุ embed token ทุก 8 นาที มีปุ่ม refresh และเปิด dashboard แยกแท็บ
+- ใช้ signed/static embedding ที่ Metabase OSS รองรับ ไม่มี public link
+
+เปลี่ยนไปใช้ Entra ID (หรือ OIDC provider อื่น) ไม่ต้องแก้ code:
+1. ให้ IT ลงทะเบียนแอป redirect URI `<เว็บ>/callback` และสร้าง app roles `safety`, `operations`, `engineering`
+2. ใส่ client id/secret ใน `.secrets/oidc-client.json`
+3. ตั้ง `OIDC_ISSUER` (เช่น `https://login.microsoftonline.com/<tenant-id>/v2.0`) และ `BI_PUBLIC_URL` ให้ service `bi-web`
+   และลบ `OIDC_DISCOVERY_URL` (ค่านั้นชี้ Keycloak ใน docker network)
 
 ## ตรวจซ้ำและหยุด
 
@@ -188,11 +252,18 @@ API อ่าน metadata สูงสุด 1,000 เที่ยวบิน�
 powershell -File scripts/start_bi_demo.ps1 -CheckOnly
 ```
 
-ตรวจจำนวนข้อมูล/quality gates/OPA denials และทุก Metabase card รวม filters,
-no-match case, signed metadata และการปฏิเสธ token ปลอม
+ตรวจจำนวนข้อมูล/quality gates/OPA denials และทุก Metabase card ของทุก role รวม filters,
+no-match case, signed metadata และการปฏิเสธ token ที่ถูกแก้
+แล้วรัน `scripts/check_sso_flow.py` ซึ่ง login ผ่านฟอร์มจริงของ Keycloak ทีละผู้ใช้เดโม และตรวจว่า
+- แต่ละ role ได้ dashboard ของตัวเอง และตัวเลขใน dashboard/Flight API ตรงกับที่ Trino ตอบให้ role นั้น
+- Operations เห็น tail เป็น REDACTED
+- `norole.demo` ได้ 403, ผู้ที่ยังไม่ login ได้ 401, sign out แล้วต้องใส่ password ใหม่
+- Metabase ปฏิเสธ token ที่ถูกแก้เลข dashboard
+- Trino ปฏิเสธ password ผิด/ไม่มี password และ login ของ role สวมเป็น admin ไม่ได้
+
 `-NoWeb` ใช้เปิด stack และเตรียม BI โดยไม่เปิดเว็บ server
 หากจะเปิดเว็บใน terminal เองแทน container ให้ `docker compose -f docker-compose.bi-local.yaml stop bi-web` ก่อน
-แล้วใช้ `python scripts/serve_bi_demo.py` และหยุดด้วย Ctrl+C
+แล้ว `pip install "pyjwt[crypto]"` ใช้ `python scripts/serve_bi_demo.py` และหยุดด้วย Ctrl+C
 
 หยุด containers ของเดโมนี้โดยเก็บข้อมูลไว้:
 
@@ -202,5 +273,9 @@ docker compose -f docker-compose.bi-local.yaml stop
 
 อย่าใช้ `down -v` หากต้องการเก็บข้อมูลเดโม เพราะจะลบ volumes ของ stack นี้
 ไฟล์ compose เดิมของ repo ยังใช้ชื่อ container/port เดิม จึงให้ใช้ไฟล์ bi-local สำหรับเดโมนี้
-Metabase H2 และชื่อ user ที่ส่งเองเหมาะสำหรับ local POC; ก่อนเปิดให้ผู้ใช้อื่นต้องออกแบบ
-application authentication, identity mapping และ application database สำหรับการใช้งานจริง
+ก่อนเปิดให้ผู้ใช้อื่นนอกเครื่องเดโม ยังต้องทำเพิ่ม:
+- เว็บและ Keycloak ต้องอยู่หลัง HTTPS แล้วเพิ่ม flag `Secure` ให้ cookie (มี `ponytail:` comment ใน `serve_bi_demo.py`)
+- ย้ายเว็บจาก `http.server` ไปใช้ server สำหรับ production และเก็บ session นอก memory ถ้ามีหลาย instance
+- Keycloak โหมด production พร้อม database หรือใช้ Entra ID ของ TG
+- Trino ใช้ certificate จาก CA ขององค์กรแทน self-signed และใช้ Metabase application database (เช่น Postgres) แทน H2
+- สิทธิ์ role editor ใน Metabase (กลุ่มที่แก้ได้เฉพาะ collection ของ role ตัวเอง) ยังไม่ได้ตั้ง ตอนนี้มีแต่ admin
