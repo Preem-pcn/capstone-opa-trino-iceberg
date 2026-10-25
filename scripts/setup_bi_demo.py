@@ -123,7 +123,7 @@ def seed_role(client, role, state):
     cards = cards_for(role)
     for card in cards:
         body = {"name": card["name"], "display": card["display"],
-                "description": f"Runs as Trino user {info['trino_user']}; OPA filters and masks the result.",
+                "description": f"Flight analytics for {info['label']}. {info['scope']}",
                 "collection_id": saved["collection_id"], "dataset_query": dataset(saved["database_id"], card),
                 "visualization_settings": card["settings"]}
         existing_id = saved["cards"].get(card["key"])
@@ -136,7 +136,7 @@ def seed_role(client, role, state):
     # Preserve server dashcard IDs on reruns rather than accumulating duplicates.
     existing = client.api("GET", f'/dashboard/{saved["dashboard_id"]}')
     previous = {c.get("card_id"): c["id"] for c in existing.get("dashcards", [])}
-    intro = f'{MANIFEST["intro"]} · {info["label"]}\n\nTrino user `{info["trino_user"]}` · {info["scope"]}'
+    intro = f'{MANIFEST["intro"]} · {info["label"]}\n\n{info["scope"]}'
     dashcards = [{"id": previous.get(None, -1), "card_id": None, "row": 0, "col": 0,
                   "size_x": 24, "size_y": 2, "parameter_mappings": [],
                   "visualization_settings": {"text": intro, "virtual_card": {"display": "text"}}}]

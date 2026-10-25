@@ -3,7 +3,7 @@
 SELECT s.flight_date,
        substr(lower(to_hex(sha256(to_utf8(e.flight_id)))), 1, 12) AS flight_reference,
        s.aircraft_type,
-       CASE WHEN f.decoder_version LIKE 'synthetic-%' THEN 'Synthetic demo' ELSE 'Decoded recording' END AS data_source,
+       CASE WHEN f.decoder_version LIKE 'synthetic-%' THEN 'Synthetic data' ELSE 'Decoded recording' END AS data_source,
        e.event,
        e.t_offset_s AS seconds_from_recording_start,
        e.ts AS event_time,

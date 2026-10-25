@@ -34,8 +34,8 @@ export function BackendError() {
   const { reload } = useSession();
   return (
     <GateCard>
-      <h1>Can't reach the QAR backend</h1>
-      <p>The sign-in service didn't answer. Check that the web service is running, then try again.</p>
+      <h1>Service unavailable</h1>
+      <p>We couldn't reach the sign-in service. Please try again in a moment.</p>
       <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={reload}>Try again</button>
     </GateCard>
   );
@@ -46,8 +46,8 @@ export function BackendError() {
 export function NoAccess({ user }: { user: string }) {
   return (
     <GateCard>
-      <h1>No dashboard role</h1>
-      <p>You're signed in as <span className="mono">{user}</span>. Your account has no dashboard role. Ask an administrator to assign safety, operations or engineering.</p>
+      <h1>Access not assigned</h1>
+      <p>You're signed in as <span className="mono">{user}</span>. Ask your administrator to assign access to flight analytics.</p>
       <a className="btn" style={{ alignSelf: 'flex-start' }} href="/logout">Sign out</a>
     </GateCard>
   );

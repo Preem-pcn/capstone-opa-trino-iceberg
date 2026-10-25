@@ -24,7 +24,7 @@ from . import settings
 
 SQL_MAX_ROWS = 500
 SQL_SECONDS = 30
-CATALOG_SCHEMAS = ("silver", "gold", "opa_demo_silver", "opa_demo_gold")
+CATALOG_SCHEMAS = ("silver", "gold")
 
 
 class DataError(Exception):
@@ -116,7 +116,7 @@ def dashboard_link(role: str) -> tuple[int, str]:
         config = _secret("metabase-embed.json")
         dashboard_id = int(config["dashboards"][role])
     except (FileNotFoundError, KeyError, ValueError):
-        raise DataError(503, "Dashboards are not set up yet. Run scripts/setup_bi_demo.py.") from None
+        raise DataError(503, "Reports are not available yet. Please contact your administrator.") from None
     now = int(time.time())
     token = jwt.encode({"resource": {"dashboard": dashboard_id}, "params": {}, "iat": now,
                         "exp": now + settings.EMBED_SECONDS}, config["secret"], algorithm="HS256")

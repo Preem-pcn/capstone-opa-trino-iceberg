@@ -26,7 +26,7 @@ export function Reports() {
         if (e instanceof ApiError && e.status === 401) { expire(); return; }
         const fromServer = e instanceof ApiError && e.status > 0;
         setState({ status: 'error', fromServer,
-          message: fromServer ? (e as ApiError).message : 'Dashboard unavailable. Start the local BI demo server and Metabase, then use Refresh dashboard.' });
+          message: fromServer ? (e as ApiError).message : 'Dashboard unavailable. Try refreshing in a moment.' });
       },
     );
     return () => { live = false; };
@@ -40,14 +40,14 @@ export function Reports() {
   }, [state]);
 
   const pill = state.status === 'ready'
-    ? `${state.info.role_label} dashboard · Trino user ${state.info.query_identity} · read-only`
+    ? `${state.info.role_label} · Read only`
     : state.status === 'error' && state.fromServer ? 'No dashboard for this account' : 'Checking your role…';
   const loadText = state.status === 'error' ? state.message : state.status === 'ready' ? 'Loading the Gold dashboard…' : 'Connecting to Metabase…';
 
   return (
     <>
       <div className="page-head">
-        <div><h1>Gold Reports</h1><p>Existing Iceberg Gold data · queried through Trino and visualized by Metabase</p></div>
+        <div><h1>Flight Reports</h1><p>Flight performance, phase durations and detected events.</p></div>
         <div className="row">
           <button className="btn" onClick={() => setNonce(n => n + 1)}>Refresh dashboard</button>
           <button className="btn primary" onClick={() => window.open('/metabase', '_blank', 'noopener')}>Open in Metabase ↗</button>
@@ -55,13 +55,11 @@ export function Reports() {
       </div>
       <section className="card bi-context">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <b>Metabase · Live Gold dashboard · capstone-opa-trino-iceberg</b>
+          <b>Flight analytics</b>
           <span className="pill teal">{pill}</span>
         </div>
         <p className="small muted" style={{ marginTop: 9 }}>
-          Use Flight date and Aircraft type inside the dashboard. Each role has its own dashboard. Its charts query this repo’s Gold tables
-          through Trino over HTTPS with that role’s login, so OPA filters rows and masks columns before Metabase receives them. Flight Explorer
-          reads Silver the same way; Cockpit and SQL Workspace keep their sample data.
+          Filter by flight date and aircraft type. Reports follow the access permissions assigned to your account.
         </p>
       </section>
       <section className="card bi-dashboard">

@@ -22,7 +22,7 @@ const options = (rows: FlightRow[], key: 'aircraft_type' | 'origin' | 'destinati
   [...new Set(rows.map(x => x[key]).filter((v): v is string => !!v))].sort();
 
 export function SourceBadge({ f }: { f: Pick<FlightRow, 'is_synthetic'> }) {
-  return <span className={`pill sm ${f.is_synthetic ? '' : 'teal'}`}>{f.is_synthetic ? 'Synthetic demo' : 'Recorded'}</span>;
+  return <span className={`pill sm ${f.is_synthetic ? '' : 'teal'}`}>{f.is_synthetic ? 'Synthetic data' : 'Recorded'}</span>;
 }
 
 export function Explorer() {
@@ -58,7 +58,7 @@ export function Explorer() {
   return (
     <>
       <div className="page-head">
-        <div><h1>Browse flights</h1><p>Recorded and synthetic flights from Silver · UTC</p></div>
+        <div><h1>Browse flights</h1><p>Search flight recordings and review flight performance.</p></div>
         <div className="row">
           <span className="pill">{flights.status === 'ready' ? countText(rows.length) : 'Loading…'}</span>
           <button className="btn" onClick={() => loadFlights(true)}>Refresh flights</button>
@@ -93,17 +93,17 @@ export function Explorer() {
       </div>
       <section className="card" style={{ padding: '20px 14px 24px' }}>
         <div className="card-head" style={{ padding: '0 8px' }}>
-          <h3>Silver flights</h3>
-          <div className="seg2" aria-label="Data source">
+          <h3>Flight recordings</h3>
+          {recorded < all.length && <div className="seg2" aria-label="Data source">
             {([['', 'All', all.length], ['recorded', 'Recorded', recorded], ['synthetic', 'Synthetic', all.length - recorded]] as const).map(([key, label, n]) => (
               <button key={key} className={f.source === key ? 'on' : ''} aria-pressed={f.source === key} onClick={() => setFilters({ source: key })}>{label} ({n})</button>
             ))}
-          </div>
+          </div>}
         </div>
         <Rows rows={rows} page={page} setPage={setPage} openFlight={openFlight} onReset={resetFilters} onRetry={() => loadFlights(true)} />
       </section>
       <p className="small muted">
-        Source: iceberg.silver.flights · Trino identity: {flights.status === 'ready' ? flights.data.query_identity : 'loading'} · Flight numbers are shown as stored, including source placeholders.
+        Showing flights available to your account. All timestamps are UTC.
         {flights.status === 'ready' && flights.data.truncated && ` Showing the first ${all.length} of ${flights.data.total} available flights.`}
       </p>
     </>
@@ -114,7 +114,7 @@ function Rows({ rows, page, setPage, openFlight, onReset, onRetry }: {
   rows: FlightRow[]; page: number; setPage(p: number): void; openFlight(id: string): void; onReset(): void; onRetry(): void;
 }) {
   const { flights } = useAppState();
-  if (flights.status === 'idle' || flights.status === 'loading') return <div className="state" role="status">Loading flights from Silver…</div>;
+  if (flights.status === 'idle' || flights.status === 'loading') return <div className="state" role="status">Loading flight recordings…</div>;
   if (flights.status === 'error') {
     return <div className="state" role="alert"><h4>Flights unavailable</h4><p>{flights.message}</p><button className="btn" onClick={onRetry}>Retry</button></div>;
   }

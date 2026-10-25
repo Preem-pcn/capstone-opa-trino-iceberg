@@ -120,7 +120,7 @@ python scripts/setup_bi_demo.py
 
 คำสั่งแรกสร้าง recording จำลองที่มีชื่อ tail `DEMO-*` และ flight number `DEMO001`–`DEMO005`
 ใน `decoded/` แล้วโหลดผ่าน Silver → Gold ด้วย loader/SQL เดิม คำสั่งที่สองอัปเดต cards
-เพื่อแสดงคอลัมน์ `data_source` แยก `Synthetic demo` กับ `Decoded recording`
+เพื่อแสดงคอลัมน์ `data_source` แยก `Synthetic data` กับ `Decoded recording`
 จากนั้นกด Refresh dashboard ในหน้าเว็บ
 
 เพิ่ม A350 3 เที่ยวบินและ B777 2 เที่ยวบิน วันที่ 22–26 กันยายน 2022
@@ -216,18 +216,17 @@ reference ของ flight ในรายงานเป็น SHA-256 prefix 1
 backend ส่งไฟล์ของ client และส่ง `index.html` ให้ทุก route ของ client (`/flights`, `/reports`, ...)
 Gold Reports แสดง dashboard จริง และ Flight Explorer อ่านรายการจาก Silver ผ่าน Trino
 พร้อมเปิดรายละเอียดจาก Silver และ metrics/phases/events จาก Gold ตาม flight ID ที่เลือก
-ส่วน Cockpit และ SQL Workspace ยังใช้ข้อมูล prototype เดิม
+SQL Workspace และ Sensor Playback query Trino ผ่าน backend ตาม role ที่ login แล้ว ไม่มี mock data ใน client
 แถบบนแสดงผู้ใช้ที่ login และ role พร้อมปุ่ม Sign out
-หน้า prototype (SQL Workspace, OPA fixtures) เริ่มจาก Trino user ของ role ที่ login
-ปุ่มในหน้า OPA fixtures ยังสลับ identity ได้เพราะใช้ข้อมูล mock ไม่ได้ query Trino
+SQL Workspace ใช้ Trino user ของ session จริงเสมอ ไม่มีปุ่มสลับ identity หรือหน้า fixture preview ในแอป
 หลังแก้ client หรือ backend ให้ build ใหม่ด้วย `docker compose -f docker-compose.app.yaml up -d --build backend` แล้ว reload
 endpoint และโครงสร้างของ client อยู่ใน `client/README.md`
 
 ### Flight Explorer
 
 เปิด **http://localhost:8766/flights** เพื่อดูข้อมูล `iceberg.silver.flights`
-รวมเที่ยวบินจริงและเที่ยวบินจำลองที่โหลดเข้ามาแล้ว (ชุดเดโมปัจจุบัน 108 เที่ยวบิน:
-ข้อมูลจริง 3 และจำลอง 105) มีป้าย Recorded / Synthetic demo ให้แยกแหล่งข้อมูล
+รายการแสดงตามข้อมูลที่โหลดเข้า Silver และสิทธิ์ของบัญชี ชุด recording ใน repo มี A350 3 recording
+หากเคยโหลดข้อมูลสังเคราะห์สำหรับทดสอบ จะยังแยกด้วยป้าย Synthetic data และตัวกรองแหล่งข้อมูล
 เลขเที่ยวบินแสดงตามที่เก็บใน Silver เช่น `TG0000` ของ decoded บาง recording
 ไม่ได้แทนที่ด้วยเลขเที่ยวบินตัวอย่างจากต้นแบบ
 
@@ -238,7 +237,8 @@ API อ่าน metadata สูงสุด 1,000 เที่ยวบิน�
 
 `GET /api/flights` ใช้ SELECT ที่กำหนดไว้ และ `GET /api/flights/detail?id=...`
 ใช้ parameterized query ของ flight ID เพื่ออ่าน metadata, summary, phases และ events
-ไม่มี endpoint รับ SQL หรือเปลี่ยน identity จาก browser; query ด้วย Trino user ของ role ที่ login
+SQL Workspace ส่ง SQL ไป `POST /api/sql` และอ่าน catalog จาก `GET /api/catalog`;
+browser ไม่สามารถเลือก identity เองได้ ทุก query ใช้ Trino user ของ role ที่ login
 (HTTPS + password ของ user นั้น) OPA จึงกรองแถวและ mask เหมือน dashboard
 ถ้า OPA ปฏิเสธบาง column ของ summary (เช่น `touchdown_peak_g` ของ Operations) API อ่านรายชื่อ column
 ที่ role นั้นเห็นจาก `information_schema.columns` แล้วเลือกเฉพาะ column เหล่านั้น หน้าเว็บแสดงเป็น `—`
@@ -257,6 +257,8 @@ FastAPI + uvicorn ใน container ของตัวเอง (`backend/Dockerf
 | `/api/me` | ผู้ใช้, role, Trino user ของ session นี้ |
 | `/api/bi/embed`, `/metabase` | เซ็น JWT อายุ 10 นาทีสำหรับ dashboard ของ role นี้เท่านั้น |
 | `/api/flights`, `/api/flights/detail` | Flight API ด้วย Trino user ของ role นี้ |
+| `/api/catalog` | รายชื่อ tables/columns ที่ Trino และ OPA อนุญาตให้ role นี้เห็น |
+| `/api/sql` | รับ SQL จาก Workspace แล้ว query Trino ด้วย role ของ session จำกัดผล 500 แถวและเวลา 30 วินาที |
 
 - ยังไม่ login: หน้าเว็บ redirect ไป `/login` ส่วน API ตอบ 401 (หน้าเว็บพาไป login ให้)
 - login แล้วแต่ไม่มี role หรือมีหลาย role: API ข้อมูลตอบ 403 และหน้าเว็บแสดงข้อความ

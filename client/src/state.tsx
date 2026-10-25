@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, fetchFlightDetail, fetchFlights, type FlightDetail, type FlightList } from './api';
-import { SAVED } from './data/demo';
-import { runQuery, SqlError, type QueryResult } from './lib/sqlEngine';
+import { ApiError, executeSql, fetchFlightDetail, fetchFlights, type FlightDetail, type FlightList, type SqlResult } from './api';
+import { SQL_EXAMPLES } from './lib/sqlExamples';
 import { useMe, useSession } from './session';
 
 export interface ExplorerFilters { q: string; from: string; to: string; type: string; org: string; dst: string; source: '' | 'recorded' | 'synthetic' }
@@ -18,16 +17,11 @@ export type Load<T> =
 
 export type SqlRun =
   | { status: 'idle' | 'run' | 'can' }
-  | { status: 'ok'; result: QueryResult; ms: number; identity: string }
+  | { status: 'ok'; result: SqlResult; ms: number; identity: string }
   | { status: 'err' | 'den'; msg: string; identity: string };
 export interface HistoryItem { sql: string; status: SqlRun['status']; label: string }
 
 interface AppState {
-  // Trino identity the SQL and fixture pages simulate. Starts as the signed-in
-  // role's Trino user; the fixture page's walk-through buttons switch it.
-  identity: string;
-  setSimIdentity(id: string | null): void;
-
   explorer: ExplorerFilters;
   setFilters(patch: Partial<ExplorerFilters>): void;
   resetFilters(): void;
@@ -59,9 +53,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const me = useMe();
   const { expire } = useSession();
-  const [simIdentity, setSimIdentity] = useState<string | null>(null);
-  const identity = simIdentity ?? me.trino_user ?? 'blocked_user';
-
   const [explorer, setExplorer] = useState(NO_FILTERS);
   const [page, setPage] = useState(1);
   const setFilters = useCallback((patch: Partial<ExplorerFilters>) => { setExplorer(f => ({ ...f, ...patch })); setPage(1); }, []);
@@ -95,55 +86,58 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     );
   }, [expire]);
 
-  const [ck, setCk] = useState<CockpitState>({ flight: 'TG0341', t: 0, speed: 1 });
+  const [ck, setCk] = useState<CockpitState>({ flight: '', t: 0, speed: 1 });
   const [tree, setTree] = useState(() => new Set(['iceberg', 'iceberg.silver', 'iceberg.gold', 'iceberg.silver.rate_1hz', 'iceberg.silver.rate_4hz', 'iceberg.silver.rate_8hz']));
   const [catq, setCatq] = useState('');
 
-  const [sqlText, setSqlText] = useState(SAVED[0].sql);
+  const [sqlText, setSqlText] = useState(SQL_EXAMPLES[0].sql);
   const [sqlRun, setSqlRun] = useState<SqlRun>({ status: 'idle' });
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const timer = useRef<number | null>(null);
-  const stopTimer = () => { if (timer.current !== null) { clearTimeout(timer.current); timer.current = null; } };
-  useEffect(() => stopTimer, []);
+  const pending = useRef<{ controller: AbortController; sql: string } | null>(null);
+  useEffect(() => () => { pending.current?.controller.abort(); pending.current = null; }, []);
 
-  const addHistory = (item: HistoryItem) => setHistory(h => [item, ...h].slice(0, 8));
-
-  // Execution is simulated in the browser with a short artificial delay.
-  const runSql = useCallback((text: string) => {
-    if (timer.current !== null) return;
-    const started = performance.now();
+  const runSql = useCallback(async (text: string) => {
+    if (pending.current) return;
+    const request = { controller: new AbortController(), sql: text };
+    pending.current = request;
     setSqlText(text);
     setSqlRun({ status: 'run' });
-    timer.current = window.setTimeout(() => {
-      timer.current = null;
-      let run: SqlRun, label: string;
-      try {
-        const result = runQuery(text, identity);
-        run = { status: 'ok', result, ms: Math.round(performance.now() - started), identity };
-        label = `${result.rows.length} row${result.rows.length === 1 ? '' : 's'}`;
-      } catch (e) {
-        if (!(e instanceof SqlError)) throw e;
-        run = { status: e.kind, msg: e.message, identity };
-        label = e.kind === 'den' ? 'denied' : 'error';
-      }
+    try {
+      const result = await executeSql(text, request.controller.signal);
+      if (pending.current !== request) return;
+      const run: SqlRun = { status: 'ok', result, ms: result.ms, identity: result.query_identity };
       setSqlRun(run);
-      addHistory({ sql: text, status: run.status, label: `${label} · ${identity}` });
-    }, 450 + Math.random() * 450);
-  }, [identity]);
+      const item: HistoryItem = { sql: text, status: 'ok', label: `${result.rows.length} rows${result.truncated ? ' (limited)' : ''} · ${result.query_identity}` };
+      setHistory(h => [item, ...h].slice(0, 8));
+    } catch (e) {
+      if (pending.current !== request) return;
+      if (e instanceof ApiError && e.status === 401) { expire(); return; }
+      const status = e instanceof ApiError && e.status === 403 ? 'den' : 'err';
+      const identity = me.trino_user ?? 'No role';
+      setSqlRun({ status, msg: failure(e), identity });
+      const item: HistoryItem = { sql: text, status, label: `${status === 'den' ? 'denied' : 'error'} · ${identity}` };
+      setHistory(h => [item, ...h].slice(0, 8));
+    } finally {
+      if (pending.current === request) pending.current = null;
+    }
+  }, [expire, me.trino_user]);
 
   const cancelSql = useCallback(() => {
-    stopTimer();
+    const request = pending.current;
+    if (!request) return;
+    pending.current = null;
+    request.controller.abort();
     setSqlRun({ status: 'can' });
-    addHistory({ sql: sqlText, status: 'can', label: 'cancelled' });
-  }, [sqlText]);
+    setHistory(h => [{ sql: request.sql, status: 'can' as const, label: 'stopped waiting' }, ...h].slice(0, 8));
+  }, []);
 
   const loadSql = useCallback((text: string, run = false) => {
-    stopTimer();
+    cancelSql();
     setSqlText(text);
     setSqlRun({ status: 'idle' });
     navigate('/sql');
     if (run) runSql(text);
-  }, [navigate, runSql]);
+  }, [cancelSql, navigate, runSql]);
 
   const toggleTree = useCallback((k: string) => setTree(t => {
     const next = new Set(t);
@@ -155,14 +149,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     navigate(`/flights/${encodeURIComponent(id)}${tab ? `/${tab}` : ''}${phase ? `?phase=${phase}` : ''}`);
   }, [navigate]);
 
-  // Cockpit links always target the TG0341 demo recording unless told otherwise.
   const openCockpit = useCallback((patch: Partial<CockpitState> = {}) => {
-    setCk(c => ({ ...c, flight: 'TG0341', t: 0, ...patch }));
+    setCk(c => ({ ...c, t: 0, ...patch }));
     navigate('/cockpit');
   }, [navigate]);
 
   const value: AppState = {
-    identity, setSimIdentity,
     explorer, setFilters, resetFilters, page, setPage,
     flights, loadFlights, details, loadDetail,
     ck, setCk,

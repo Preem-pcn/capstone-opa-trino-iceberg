@@ -2,12 +2,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Shell } from './components/Shell';
 import { Cockpit } from './pages/Cockpit';
 import { Explorer } from './pages/Explorer';
-import { Fixtures } from './pages/Fixtures';
 import { FlightDetail } from './pages/FlightDetail';
 import { BackendError, Loading, NoAccess, SignIn } from './pages/Gate';
-import { Notes } from './pages/Notes';
 import { Reports } from './pages/Reports';
-import { Sitemap } from './pages/Sitemap';
 import { SqlWorkspace } from './pages/SqlWorkspace';
 import { SessionProvider, useSession } from './session';
 import { AppStateProvider } from './state';
@@ -41,9 +38,6 @@ function Gate() {
           <Route path="/cockpit" element={<Cockpit />} />
           <Route path="/sql" element={<SqlWorkspace />} />
           <Route path="/reports" element={<Reports />} />
-          <Route path="/fixtures" element={<Fixtures />} />
-          <Route path="/notes" element={<Notes />} />
-          <Route path="/sitemap" element={<Sitemap />} />
           <Route path="*" element={<Navigate to="/flights" replace />} />
         </Routes>
       </Shell>

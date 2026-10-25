@@ -1,10 +1,9 @@
 // Contract with the backend (backend/app/main.py).
-// mock/backend.ts serves the same routes and shapes in development.
 
 export interface Me {
   user: string;
   name: string;
-  // Exactly one known role from the IdP's roles claim; none or several gives null and no data.
+  // One role resolved by the backend from the verified identity and configured role source.
   role: string | null;
   role_label: string | null;
   scope: string | null;
@@ -53,15 +52,38 @@ export interface FlightDetail {
   query_identity: string;
 }
 
+export interface FlightSensors {
+  seconds: number;
+  series: Record<'alt' | 'ias' | 'gs' | 'heading' | 'pitch' | 'roll' | 'vrtg' | 'vrtg_max', (number | null)[]>;
+  query_identity: string;
+  source: Record<string, string>;
+}
+
+export type SqlValue = null | boolean | number | string | SqlValue[] | { [key: string]: SqlValue };
+export interface SqlColumn { name: string; type: string }
+export interface SqlResult {
+  columns: SqlColumn[];
+  rows: SqlValue[][];
+  truncated: boolean;
+  ms: number;
+  query_identity: string;
+}
+export interface CatalogResult {
+  tables: Record<string, SqlColumn[]>;
+  query_identity: string;
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
-async function getJson<T>(path: string): Promise<T> {
+async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } });
-  } catch {
+    res = await fetch(path, { ...options, credentials: 'same-origin', cache: 'no-store',
+      headers: { Accept: 'application/json', ...options.headers } });
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
     throw new ApiError(0, 'The QAR backend is not reachable.');
   }
   if (!res.ok) {
@@ -71,10 +93,16 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const fetchMe = () => getJson<Me>('/api/me');
-export const fetchEmbed = () => getJson<EmbedInfo>('/api/bi/embed');
-export const fetchFlights = () => getJson<FlightList>('/api/flights');
-export const fetchFlightDetail = (id: string) => getJson<FlightDetail>(`/api/flights/detail?id=${encodeURIComponent(id)}`);
+export const fetchMe = () => requestJson<Me>('/api/me');
+export const fetchEmbed = () => requestJson<EmbedInfo>('/api/bi/embed');
+export const fetchFlights = () => requestJson<FlightList>('/api/flights');
+export const fetchFlightDetail = (id: string) => requestJson<FlightDetail>(`/api/flights/detail?id=${encodeURIComponent(id)}`);
+export const fetchFlightSensors = (id: string, signal?: AbortSignal) => requestJson<FlightSensors>(`/api/flights/sensors?id=${encodeURIComponent(id)}`, { signal });
+export const fetchCatalog = (signal?: AbortSignal) => requestJson<CatalogResult>('/api/catalog', { signal });
+// Only SQL is sent: the backend derives the Trino account from the authenticated session.
+export const executeSql = (sql: string, signal?: AbortSignal) => requestJson<SqlResult>('/api/sql', {
+  method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sql }),
+});
 
 // A full-page navigation: the backend owns the OIDC redirects and the session cookie,
 // so the IdP tokens never reach this JavaScript. Sign-out is a plain link to /logout.
